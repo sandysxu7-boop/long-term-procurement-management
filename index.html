@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>长周期采购项目动态监测系统</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:#f0f2f5;color:#111827;font-size:14px}
+/* ── HEADER ── */
+.hd{background:linear-gradient(135deg,#0f172a,#1e3a5f);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200}
+.hd-left h1{color:#fff;font-size:17px;font-weight:700;letter-spacing:.3px}
+.hd-left p{color:rgba(255,255,255,.5);font-size:11px;margin-top:2px}
+.hd-right{display:flex;gap:8px;align-items:center}
+.status-dot{width:8px;height:8px;border-radius:50%;background:#6b7280;display:inline-block;margin-right:4px}
+.status-dot.ok{background:#10b981;box-shadow:0 0 6px #10b98180}
+.status-dot.err{background:#ef4444}
+.status-lbl{font-size:11px;color:rgba(255,255,255,.6)}
+.btn{padding:6px 14px;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;border:none;transition:all .15s}
+.btn-primary{background:#2563eb;color:#fff}
+.btn-primary:hover{background:#1d4ed8}
+.btn-ghost{background:rgba(255,255,255,.12);color:#fff;border:1px solid rgba(255,255,255,.2)}
+.btn-ghost:hover{background:rgba(255,255,255,.2)}
+.btn-sm{padding:4px 10px;font-size:11px;border-radius:5px}
+.btn-danger{background:#ef4444;color:#fff}
+.btn-green{background:#059669;color:#fff}
+.btn-green:hover{background:#047857}
+/* ── KPI STRIP ── */
+.kpi-strip{display:grid;grid-template-columns:repeat(6,1fr);background:#fff;border-bottom:1px solid #e5e7eb}
+.kpi{padding:12px 18px;border-right:1px solid #f3f4f6;cursor:pointer;transition:background .15s}
+.kpi:last-child{border-right:none}
+.kpi:hover{background:#f9fafb}
+.kpi.active-kpi{background:#eff6ff;border-bottom:3px solid #2563eb}
+.kpi-lbl{font-size:10px;color:#6b7280;text-transform:uppercase;letter-spacing:.4px}
+.kpi-val{font-size:24px;font-weight:700;color:#111827;line-height:1.1;margin:3px 0 1px}
+.kpi-sub{font-size:10px;color:#9ca3af}
+/* ── TABS ── */
+.tab-bar{display:flex;background:#fff;border-bottom:2px solid #e5e7eb;padding:0 24px}
+.tab{padding:11px 18px;font-size:13px;font-weight:500;color:#6b7280;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all .15s;white-space:nowrap}
+.tab:hover{color:#1e3a5f}
+.tab.active{color:#1e3a5f;border-bottom-color:#1e3a5f;font-weight:600}
+/* ── PAGES ── */
+.page{display:none;padding:20px 24px;min-height:calc(100vh - 150px)}
+.page.active{display:block}
+/* ── CARD ── */
+.card{background:#fff;border-radius:10px;box-shadow:0 1px 4px rgba(0,0,0,.07);margin-bottom:16px}
+.card-head{padding:12px 16px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between}
+.card-head h3{font-size:13px;font-weight:600}
+/* ── FILTER BAR ── */
+.fbar{display:flex;gap:8px;flex-wrap:wrap;padding:10px 16px;border-bottom:1px solid #f3f4f6;background:#fafafa;align-items:center}
+.fbar input,.fbar select{border:1px solid #e5e7eb;border-radius:6px;padding:5px 9px;font-size:12px;color:#374151;outline:none;background:#fff}
+.fbar input:focus,.fbar select:focus{border-color:#2563eb}
+.fbar input[type=text]{width:220px}
+.count-badge{background:#f3f4f6;color:#374151;font-size:11px;padding:2px 9px;border-radius:12px;font-weight:600;white-space:nowrap}
+/* ── TABLE ── */
+.tbl-wrap{overflow:auto}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{background:#f9fafb;padding:8px 11px;text-align:left;font-weight:600;color:#374151;font-size:11px;text-transform:uppercase;letter-spacing:.3px;border-bottom:1px solid #e5e7eb;white-space:nowrap;cursor:pointer;user-select:none}
+.tbl th:hover{background:#f3f4f6}
+.tbl th.sorted{color:#2563eb}
+.tbl th .sort-arrow{font-size:9px;margin-left:2px}
+.tbl td{padding:8px 11px;border-bottom:1px solid #f7f8f9;vertical-align:middle}
+.tbl tr:hover td{background:#fafbff;cursor:pointer}
+.tbl tr.selected td{background:#eff6ff}
+/* ── BADGES ── */
+.badge{display:inline-block;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:600;white-space:nowrap}
+.b-done{background:#dcfce7;color:#15803d}
+.b-sourcing{background:#dbeafe;color:#1d4ed8}
+.b-pending{background:#fef3c7;color:#92400e}
+.b-物业服务{background:#d1fae5;color:#065f46}
+.b-人力外包{background:#ede9fe;color:#5b21b6}
+.b-网络通讯{background:#dbeafe;color:#1d4ed8}
+.b-印刷制品{background:#fce7f3;color:#9d174d}
+.b-办公用品{background:#fef3c7;color:#92400e}
+.b-仓储物流{background:#cffafe;color:#0e7490}
+/* ── EXPIRY CHIPS ── */
+.exp-chip{display:inline-block;padding:2px 7px;border-radius:12px;font-size:11px;font-weight:600}
+.exp-over{background:#fee2e2;color:#dc2626}
+.exp-30{background:#fee2e2;color:#dc2626}
+.exp-90{background:#ffedd5;color:#c2410c}
+.exp-180{background:#fef9c3;color:#a16207}
+.exp-365{background:#f0fdf4;color:#15803d}
+.exp-far{background:#f3f4f6;color:#6b7280}
+/* ── PROGRESS SELECT ── */
+.prog-sel{border:1px solid #e5e7eb;border-radius:5px;padding:2px 6px;font-size:11px;font-weight:600;cursor:pointer;outline:none;background:#fff}
+.prog-sel.s-done{background:#dcfce7;color:#15803d;border-color:#86efac}
+.prog-sel.s-sourcing{background:#dbeafe;color:#1d4ed8;border-color:#93c5fd}
+.prog-sel.s-pending{background:#fef3c7;color:#92400e;border-color:#fde68a}
+/* ── EXPIRY PAGE ── */
+.exp-section{margin-bottom:20px}
+.exp-section-hd{display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:8px;margin-bottom:10px;font-size:13px;font-weight:600}
+.exp-hd-over{background:#fee2e2;color:#dc2626}
+.exp-hd-30{background:#fee2e2;color:#dc2626}
+.exp-hd-90{background:#ffedd5;color:#c2410c}
+.exp-hd-180{background:#fef9c3;color:#a16207}
+.exp-hd-365{background:#f0fdf4;color:#15803d}
+/* ── PROGRESS PAGE ── */
+.prog-group{margin-bottom:20px}
+.prog-group-hd{padding:10px 14px;background:#f8fafc;border-radius:8px;border-left:4px solid #2563eb;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.prog-group-hd h4{font-size:13px;font-weight:600}
+/* ── CHARTS ── */
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+.chart-card{background:#fff;border-radius:10px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.07)}
+.chart-card h3{font-size:12px;font-weight:600;color:#374151;margin-bottom:12px}
+.chart-card canvas{max-height:200px}
+/* ── MODAL ── */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center}
+.modal-overlay.open{display:flex}
+.modal{background:#fff;border-radius:12px;width:620px;max-width:96vw;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.2)}
+.modal-head{padding:16px 20px;border-bottom:1px solid #f3f4f6;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#fff;z-index:1}
+.modal-head h2{font-size:15px;font-weight:700}
+.modal-close{background:none;border:none;font-size:20px;cursor:pointer;color:#6b7280;line-height:1;padding:2px 6px}
+.modal-body{padding:20px}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.form-row.full{grid-template-columns:1fr}
+.form-group label{display:block;font-size:11px;font-weight:600;color:#374151;text-transform:uppercase;letter-spacing:.3px;margin-bottom:4px}
+.form-group input,.form-group select,.form-group textarea{width:100%;border:1px solid #e5e7eb;border-radius:6px;padding:7px 10px;font-size:13px;color:#374151;outline:none}
+.form-group input:focus,.form-group select:focus,.form-group textarea:focus{border-color:#2563eb}
+.form-group textarea{resize:vertical;min-height:60px}
+.modal-foot{padding:14px 20px;border-top:1px solid #f3f4f6;display:flex;gap:8px;justify-content:flex-end}
+/* ── DETAIL MODAL ── */
+.detail-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.detail-row{padding:8px 0;border-bottom:1px solid #f7f8f9}
+.detail-row .dl{font-size:10px;color:#9ca3af;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px}
+.detail-row .dv{font-size:13px;color:#111827;font-weight:500}
+/* ── LOADER ── */
+.loader-overlay{position:fixed;inset:0;background:rgba(255,255,255,.9);z-index:1000;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.loader-overlay.hidden{display:none}
+.spinner{width:36px;height:36px;border:3px solid #e5e7eb;border-top-color:#2563eb;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-txt{font-size:13px;color:#6b7280}
+/* ── TOAST ── */
+.toast-area{position:fixed;bottom:20px;right:20px;z-index:999;display:flex;flex-direction:column;gap:6px}
+.toast{padding:10px 16px;border-radius:8px;font-size:12px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.15);animation:slideIn .2s ease;max-width:280px}
+.toast-ok{background:#dcfce7;color:#15803d;border:1px solid #86efac}
+.toast-err{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
+.toast-info{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
+@keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+/* ── MISC ── */
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.muted{color:#9ca3af}
+.fw600{font-weight:600}
+.trunc{max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flex-center{display:flex;align-items:center;gap:6px}
+.avatar{width:22px;height:22px;border-radius:50%;background:#e5e7eb;object-fit:cover;flex-shrink:0}
+.empty-state{text-align:center;padding:48px 20px;color:#9ca3af}
+.empty-state .es-icon{font-size:40px;margin-bottom:10px}
+.empty-state p{font-size:14px}
+.inline-note{font-size:11px;color:#6b7280;font-style:italic}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+</style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div class="loader-overlay" id="loaderOverlay">
+  <div class="spinner"></div>
+  <div class="loader-txt" id="loaderTxt">正在连接 Teable，加载项目数据…</div>
+</div>
+
+<!-- TOAST -->
+<div class="toast-area" id="toastArea"></div>
+
+<!-- HEADER -->
+<div class="hd">
+  <div class="hd-left">
+    <h1>长周期采购项目动态监测系统</h1>
+    <p id="hdSub">Long-term Procurement Tracking · 实时数据</p>
+  </div>
+  <div class="hd-right">
+    <span id="statusDot" class="status-dot"></span>
+    <span class="status-lbl" id="statusLbl">连接中…</span>
+    <button class="btn btn-ghost btn-sm" onclick="refreshData()">↻ 刷新</button>
+    <button class="btn btn-primary btn-sm" onclick="openAddModal()">＋ 新增项目</button>
+  </div>
+</div>
+
+<!-- KPI STRIP -->
+<div class="kpi-strip">
+  <div class="kpi" id="kpi-all" onclick="filterByKPI('')">
+    <div class="kpi-lbl">总项目数</div>
+    <div class="kpi-val" id="k-total">—</div>
+    <div class="kpi-sub">长周期采购合同</div>
+  </div>
+  <div class="kpi" id="kpi-done" onclick="filterByKPI('✅️完成签约')">
+    <div class="kpi-lbl" style="color:#15803d">✅ 完成签约</div>
+    <div class="kpi-val" id="k-done" style="color:#15803d">—</div>
+    <div class="kpi-sub" id="k-done-pct">占总数 —%</div>
+  </div>
+  <div class="kpi" id="kpi-sourcing" onclick="filterByKPI('寻源中')">
+    <div class="kpi-lbl" style="color:#1d4ed8">🔄 寻源中</div>
+    <div class="kpi-val" id="k-sourcing" style="color:#1d4ed8">—</div>
+    <div class="kpi-sub">采购进行中</div>
+  </div>
+  <div class="kpi" id="kpi-pending" onclick="filterByKPI('待启动')">
+    <div class="kpi-lbl" style="color:#d97706">⏰ 待启动</div>
+    <div class="kpi-val" id="k-pending" style="color:#d97706">—</div>
+    <div class="kpi-sub">待采购启动</div>
+  </div>
+  <div class="kpi" onclick="showPage('expiry')">
+    <div class="kpi-lbl" style="color:#dc2626">🔥 90天内到期</div>
+    <div class="kpi-val" id="k-expiry90" style="color:#dc2626">—</div>
+    <div class="kpi-sub" id="k-expiry-sub">已过期 <b id="k-overdue">—</b> 个</div>
+  </div>
+  <div class="kpi">
+    <div class="kpi-lbl">总预算/合同金额</div>
+    <div class="kpi-val" id="k-amount">—</div>
+    <div class="kpi-sub">亿元（有金额数据项目）</div>
+  </div>
+</div>
+
+<!-- TAB BAR -->
+<div class="tab-bar">
+  <div class="tab active" id="tab-list"    onclick="showPage('list')">📋 全部项目</div>
+  <div class="tab"         id="tab-expiry"  onclick="showPage('expiry')">🔔 到期预警</div>
+  <div class="tab"         id="tab-progress" onclick="showPage('progress')">🎯 进度追踪</div>
+  <div class="tab"         id="tab-analysis" onclick="showPage('analysis')">📊 效益分析</div>
+</div>
+
+<!-- ═══ PAGE: 全部项目 ═══ -->
+<div id="pg-list" class="page active">
+  <div class="card">
+    <div class="fbar">
+      <input type="text" id="searchInput" placeholder="搜索项目名称 / 检索ID / 具体品类…" oninput="renderList()">
+      <select id="fGroup" onchange="renderList()">
+        <option value="">所有项目组</option>
+        <option>项目一组</option>
+        <option>项目二/三组</option>
+        <option>项目四组</option>
+      </select>
+      <select id="fCategory" onchange="renderList()">
+        <option value="">所有品类</option>
+        <option>网络通讯</option>
+        <option>物业服务</option>
+        <option>人力外包</option>
+        <option>印刷制品</option>
+        <option>办公用品</option>
+        <option>仓储物流</option>
+      </select>
+      <select id="fProgress" onchange="renderList()">
+        <option value="">所有进度</option>
+        <option value="✅️完成签约">完成签约</option>
+        <option value="寻源中">寻源中</option>
+        <option value="待启动">待启动</option>
+      </select>
+      <select id="fBuyer" onchange="renderList()">
+        <option value="">所有采购员</option>
+      </select>
+      <select id="fExpiry" onchange="renderList()">
+        <option value="">所有到期</option>
+        <option value="over">已过期</option>
+        <option value="30">30天内到期</option>
+        <option value="90">90天内到期</option>
+        <option value="180">180天内到期</option>
+        <option value="365">1年内到期</option>
+      </select>
+      <span class="count-badge" id="listCount">—</span>
+      <button class="btn btn-sm" style="margin-left:auto;background:#f9fafb;color:#374151;border:1px solid #e5e7eb" onclick="clearFilters()">清除筛选</button>
+    </div>
+    <div class="tbl-wrap">
+      <table class="tbl">
+        <thead>
+          <tr>
+            <th onclick="sortBy('name')" style="min-width:200px">项目名称 <span class="sort-arrow" id="sa-name"></span></th>
+            <th onclick="sortBy('category')" style="min-width:90px">一级品类 <span class="sort-arrow" id="sa-category"></span></th>
+            <th onclick="sortBy('subCategory')" style="min-width:80px">具体品类 <span class="sort-arrow" id="sa-subCategory"></span></th>
+            <th onclick="sortBy('group')" style="min-width:90px">项目组 <span class="sort-arrow" id="sa-group"></span></th>
+            <th onclick="sortBy('buyerName')" style="min-width:80px">采购员 <span class="sort-arrow" id="sa-buyerName"></span></th>
+            <th onclick="sortBy('progress')" style="min-width:90px">项目进度 <span class="sort-arrow" id="sa-progress"></span></th>
+            <th onclick="sortBy('endDate')" style="min-width:110px">合同到期 <span class="sort-arrow" id="sa-endDate"></span></th>
+            <th onclick="sortBy('amount')" class="num" style="min-width:100px">合同金额(元) <span class="sort-arrow" id="sa-amount"></span></th>
+            <th style="min-width:70px">周期</th>
+          </tr>
+        </thead>
+        <tbody id="listBody"></tbody>
+      </table>
+    </div>
+    <div class="pagination" id="pagination" style="padding:10px 14px;display:flex;align-items:center;justify-content:space-between;font-size:12px;color:#6b7280;border-top:1px solid #f3f4f6">
+      <span id="pgInfo"></span>
+      <div style="display:flex;gap:4px" id="pgBtns"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PAGE: 到期预警 ═══ -->
+<div id="pg-expiry" class="page">
+  <div id="expiryContent"></div>
+</div>
+
+<!-- ═══ PAGE: 进度追踪 ═══ -->
+<div id="pg-progress" class="page">
+  <div id="progressContent"></div>
+</div>
+
+<!-- ═══ PAGE: 效益分析 ═══ -->
+<div id="pg-analysis" class="page">
+  <div class="chart-grid" id="chartGrid">
+    <div class="chart-card"><h3>各品类项目数分布</h3><canvas id="chartCat"></canvas></div>
+    <div class="chart-card"><h3>项目进度分布</h3><canvas id="chartProg"></canvas></div>
+    <div class="chart-card"><h3>各品类合同金额（万元）</h3><canvas id="chartAmt"></canvas></div>
+    <div class="chart-card"><h3>各采购员负责项目数</h3><canvas id="chartBuyer"></canvas></div>
+  </div>
+  <div class="card">
+    <div class="card-head"><h3>各品类汇总</h3></div>
+    <div style="padding:0 16px 16px">
+      <table class="tbl" id="analysisTbl" style="margin-top:12px"></table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: 新增项目 ═══ -->
+<div class="modal-overlay" id="addModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>新增采购项目</h2>
+      <button class="modal-close" onclick="closeAddModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="form-group">
+          <label>项目组 *</label>
+          <select id="f-group">
+            <option value="">请选择</option>
+            <option>项目一组</option>
+            <option>项目二/三组</option>
+            <option>项目四组</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>一级品类 *</label>
+          <select id="f-cat">
+            <option value="">请选择</option>
+            <option>网络通讯</option>
+            <option>物业服务</option>
+            <option>人力外包</option>
+            <option>印刷制品</option>
+            <option>办公用品</option>
+            <option>仓储物流</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row full">
+        <div class="form-group">
+          <label>项目名称 *</label>
+          <input type="text" id="f-name" placeholder="请输入完整项目名称">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>具体品类</label>
+          <input type="text" id="f-subcat" placeholder="如：保洁、专线、外包">
+        </div>
+        <div class="form-group">
+          <label>项目进度</label>
+          <select id="f-progress">
+            <option value="待启动">待启动</option>
+            <option value="寻源中">寻源中</option>
+            <option value="✅️完成签约">✅️完成签约</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>检索ID / 合同编号</label>
+          <input type="text" id="f-searchid" placeholder="TAL-XXXXXXXX">
+        </div>
+        <div class="form-group">
+          <label>签约/计划签约周期</label>
+          <input type="text" id="f-duration" placeholder="如：2年、3年">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>预算/合同金额（元）</label>
+          <input type="number" id="f-amount" placeholder="单位：元">
+        </div>
+        <div class="form-group">
+          <label>合同起始日期</label>
+          <input type="date" id="f-start">
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>合同到期日期</label>
+          <input type="date" id="f-end">
+        </div>
+        <div class="form-group">
+          <label>&nbsp;</label>
+          <div class="inline-note" style="padding-top:8px">到期日期填写后自动计算预警</div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-sm" style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb" onclick="closeAddModal()">取消</button>
+      <button class="btn btn-primary btn-sm" onclick="submitAddProject()" id="addSubmitBtn">保存到 Teable</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ MODAL: 项目详情 / 编辑 ═══ -->
+<div class="modal-overlay" id="detailModal">
+  <div class="modal" style="width:680px">
+    <div class="modal-head">
+      <h2 id="detailTitle">项目详情</h2>
+      <button class="modal-close" onclick="closeDetailModal()">×</button>
+    </div>
+    <div class="modal-body" id="detailBody"></div>
+    <div class="modal-foot">
+      <button class="btn btn-sm" style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb" onclick="closeDetailModal()">关闭</button>
+      <button class="btn btn-primary btn-sm" onclick="saveDetail()" id="detailSaveBtn">保存修改</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ────────────────────────────────────────────────────────────────
+   CONFIG
+──────────────────────────────────────────────────────────────── */
+const TEABLE_BASE = 'https://yach-teable.zhiyinlou.com';
+const TABLE_ID    = 'tblwotOBEtoOOchp8Sj';
+const TOKEN       = 'teable_accv0YqVn9u1avfVdzv_F0wNqCFXBPYHg53lhbK2OqLHfC5TP6yUs3FAR6xApwY=';
+
+const CAT_COLORS = {
+  '网络通讯':'#2563eb','物业服务':'#059669','人力外包':'#7c3aed',
+  '印刷制品':'#db2777','办公用品':'#d97706','仓储物流':'#0891b2'
+};
+
+/* ────────────────────────────────────────────────────────────────
+   STATE
+──────────────────────────────────────────────────────────────── */
+let allRecords   = [];   // raw normalized records
+let filteredRecs = [];
+let sortKey      = 'endDate';
+let sortAsc      = true;
+let currentPage  = 1;
+const PAGE_SIZE  = 50;
+let kpiFilter    = '';
+let chartsDrawn  = false;
+let editingId    = null; // record id in detail modal
+
+/* ────────────────────────────────────────────────────────────────
+   TEABLE API
+──────────────────────────────────────────────────────────────── */
+async function teableGet(path) {
+  const r = await fetch(TEABLE_BASE + path, {
+    headers:{ 'Authorization':'Bearer '+TOKEN, 'Accept':'application/json' }
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+async function teablePatch(path, body) {
+  const r = await fetch(TEABLE_BASE + path, {
+    method:'PATCH',
+    headers:{ 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json', 'Accept':'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
+  return r.json();
+}
+
+async function teablePost(path, body) {
+  const r = await fetch(TEABLE_BASE + path, {
+    method:'POST',
+    headers:{ 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json', 'Accept':'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
+  return r.json();
+}
+
+/* ────────────────────────────────────────────────────────────────
+   DATA
+──────────────────────────────────────────────────────────────── */
+function normalize(rec) {
+  const f = rec.fields || {};
+  const buyer = f['采购员'];
+  const buyerObj = typeof buyer === 'object' && buyer ? buyer : null;
+  const endDateStr = f['合同到期日期'] || null;
+  const startDateStr = f['合同起始日期'] || null;
+  const endDate = endDateStr ? new Date(endDateStr) : null;
+  const startDate = startDateStr ? new Date(startDateStr) : null;
+  const today = new Date(); today.setHours(0,0,0,0);
+  const daysToExpiry = endDate ? Math.round((endDate - today) / 86400000) : null;
+  const endProgress = f['辅助列-到期前进展'];
+  return {
+    id: rec.id,
+    group: f['项目组'] || '',
+    category: f['一级品类'] || '',
+    progress: f['项目进度'] || '待启动',
+    name: f['项目名称'] || '',
+    buyerName: buyerObj ? (buyerObj.title||'').split('-')[0] : (buyer||''),
+    buyerTitle: buyerObj ? (buyerObj.title||'') : '',
+    buyerAvatar: buyerObj ? buyerObj.avatarUrl : null,
+    duration: f['签约/计划签约周期'] || '',
+    searchId: f['检索ID'] || '',
+    subCategory: f['具体品类'] || '',
+    amount: f['预算/合同金额（单位：元）'] || 0,
+    startDate, endDate,
+    startDateStr: startDate ? startDate.toISOString().slice(0,10) : '',
+    endDateStr: endDate ? endDate.toISOString().slice(0,10) : '',
+    daysToExpiry,
+    endProgress: Array.isArray(endProgress) ? endProgress : (endProgress ? [endProgress] : []),
+  };
+}
+
+async function loadAllRecords() {
+  setLoader('正在从 Teable 加载项目数据…');
+  let all = [], skip = 0, take = 1000;
+  while (true) {
+    const data = await teableGet(`/api/table/${TABLE_ID}/record?fieldKeyType=name&take=${take}&skip=${skip}`);
+    const recs = data.records || [];
+    all = all.concat(recs.map(normalize));
+    if (recs.length < take) break;
+    skip += take;
+  }
+  return all;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   KPIs
+──────────────────────────────────────────────────────────────── */
+function updateKPIs() {
+  const n = allRecords.length;
+  const done = allRecords.filter(r=>r.progress==='✅️完成签约').length;
+  const sourcing = allRecords.filter(r=>r.progress==='寻源中').length;
+  const pending = allRecords.filter(r=>r.progress==='待启动').length;
+  const over90 = allRecords.filter(r=>r.daysToExpiry!==null&&r.daysToExpiry<=90&&r.daysToExpiry>=0).length;
+  const overdue = allRecords.filter(r=>r.daysToExpiry!==null&&r.daysToExpiry<0).length;
+  const totalAmt = allRecords.reduce((s,r)=>s+r.amount,0);
+
+  document.getElementById('k-total').textContent = n;
+  document.getElementById('k-done').textContent = done;
+  document.getElementById('k-done-pct').textContent = `占总数 ${n?Math.round(done/n*100):0}%`;
+  document.getElementById('k-sourcing').textContent = sourcing;
+  document.getElementById('k-pending').textContent = pending;
+  document.getElementById('k-expiry90').textContent = over90;
+  document.getElementById('k-overdue').textContent = overdue;
+  document.getElementById('k-amount').textContent = (totalAmt/1e8).toFixed(2);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   HELPERS
+──────────────────────────────────────────────────────────────── */
+function progressClass(p) {
+  if (p==='✅️完成签约') return 'b-done';
+  if (p==='寻源中') return 'b-sourcing';
+  return 'b-pending';
+}
+function progressSelClass(p) {
+  if (p==='✅️完成签约') return 's-done';
+  if (p==='寻源中') return 's-sourcing';
+  return 's-pending';
+}
+function expiryChip(days) {
+  if (days === null) return '<span class="exp-chip exp-far">无到期日</span>';
+  if (days < 0) return `<span class="exp-chip exp-over">已过期${Math.abs(days)}天</span>`;
+  if (days <= 30) return `<span class="exp-chip exp-30">剩${days}天</span>`;
+  if (days <= 90) return `<span class="exp-chip exp-90">剩${days}天</span>`;
+  if (days <= 180) return `<span class="exp-chip exp-180">剩${days}天</span>`;
+  if (days <= 365) return `<span class="exp-chip exp-365">剩${days}天</span>`;
+  return `<span class="exp-chip exp-far">${days}天后</span>`;
+}
+function fmtDate(d) {
+  if (!d) return '—';
+  if (typeof d === 'string') return d.slice(0,10);
+  return d.toISOString().slice(0,10);
+}
+function fmtAmt(n) {
+  if (!n) return '—';
+  if (n >= 1e8) return (n/1e8).toFixed(2)+'亿';
+  if (n >= 1e4) return (n/1e4).toFixed(1)+'万';
+  return n.toLocaleString();
+}
+function catBadge(cat) {
+  return `<span class="badge b-${cat}" style="font-size:10px">${cat}</span>`;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   FILTER + SORT
+──────────────────────────────────────────────────────────────── */
+function applyFilters() {
+  const q  = (document.getElementById('searchInput').value||'').toLowerCase();
+  const fg = document.getElementById('fGroup').value;
+  const fc = document.getElementById('fCategory').value;
+  const fp = document.getElementById('fProgress').value || kpiFilter;
+  const fb = document.getElementById('fBuyer').value;
+  const fe = document.getElementById('fExpiry').value;
+
+  filteredRecs = allRecords.filter(r => {
+    if (q && !r.name.toLowerCase().includes(q) &&
+             !r.searchId.toLowerCase().includes(q) &&
+             !r.subCategory.toLowerCase().includes(q)) return false;
+    if (fg && r.group !== fg) return false;
+    if (fc && r.category !== fc) return false;
+    if (fp && r.progress !== fp) return false;
+    if (fb && r.buyerName !== fb) return false;
+    if (fe) {
+      const d = r.daysToExpiry;
+      if (fe === 'over'  && !(d !== null && d < 0)) return false;
+      if (fe === '30'    && !(d !== null && d >= 0 && d <= 30)) return false;
+      if (fe === '90'    && !(d !== null && d >= 0 && d <= 90)) return false;
+      if (fe === '180'   && !(d !== null && d >= 0 && d <= 180)) return false;
+      if (fe === '365'   && !(d !== null && d >= 0 && d <= 365)) return false;
+    }
+    return true;
+  });
+
+  // Sort
+  filteredRecs.sort((a, b) => {
+    let av = a[sortKey], bv = b[sortKey];
+    if (av === null || av === undefined) av = sortAsc ? Infinity : -Infinity;
+    if (bv === null || bv === undefined) bv = sortAsc ? Infinity : -Infinity;
+    if (typeof av === 'string') return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+    return sortAsc ? av - bv : bv - av;
+  });
+}
+
+function sortBy(key) {
+  if (sortKey === key) sortAsc = !sortAsc;
+  else { sortKey = key; sortAsc = true; }
+  renderList();
+}
+
+function clearFilters() {
+  kpiFilter = '';
+  document.getElementById('searchInput').value = '';
+  ['fGroup','fCategory','fProgress','fBuyer','fExpiry'].forEach(id => document.getElementById(id).value = '');
+  document.querySelectorAll('.kpi').forEach(k=>k.classList.remove('active-kpi'));
+  renderList();
+}
+
+function filterByKPI(prog) {
+  kpiFilter = prog;
+  document.getElementById('fProgress').value = '';
+  document.querySelectorAll('.kpi').forEach(k=>k.classList.remove('active-kpi'));
+  if (!prog) document.getElementById('kpi-all').classList.add('active-kpi');
+  else if (prog==='✅️完成签约') document.getElementById('kpi-done').classList.add('active-kpi');
+  else if (prog==='寻源中') document.getElementById('kpi-sourcing').classList.add('active-kpi');
+  else if (prog==='待启动') document.getElementById('kpi-pending').classList.add('active-kpi');
+  showPage('list');
+  renderList();
+}
+
+/* ────────────────────────────────────────────────────────────────
+   RENDER: PROJECT LIST
+──────────────────────────────────────────────────────────────── */
+function renderList() {
+  applyFilters();
+  currentPage = 1;
+  renderPage();
+}
+
+function renderPage() {
+  // Sort arrows
+  ['name','category','subCategory','group','buyerName','progress','endDate','amount'].forEach(k => {
+    const el = document.getElementById('sa-'+k);
+    if (el) el.textContent = sortKey===k ? (sortAsc?'↑':'↓') : '';
+  });
+
+  const total = filteredRecs.length;
+  const pages = Math.ceil(total / PAGE_SIZE);
+  const start = (currentPage-1)*PAGE_SIZE;
+  const slice = filteredRecs.slice(start, start+PAGE_SIZE);
+
+  document.getElementById('listCount').textContent = `${total} 项`;
+
+  const body = document.getElementById('listBody');
+  if (!slice.length) {
+    body.innerHTML = `<tr><td colspan="9" style="text-align:center;padding:40px;color:#9ca3af">暂无匹配项目</td></tr>`;
+  } else {
+    body.innerHTML = slice.map(r => `
+      <tr onclick="openDetail('${r.id}')">
+        <td><div class="trunc" title="${r.name}">${r.name}</div></td>
+        <td>${catBadge(r.category)}</td>
+        <td><span class="muted">${r.subCategory||'—'}</span></td>
+        <td><span style="font-size:11px;color:#374151">${r.group}</span></td>
+        <td>
+          <div class="flex-center">
+            ${r.buyerAvatar?`<img class="avatar" src="${r.buyerAvatar}" onerror="this.style.display='none'">`:''}
+            <span>${r.buyerName||'—'}</span>
+          </div>
+        </td>
+        <td>
+          <select class="prog-sel ${progressSelClass(r.progress)}"
+            onclick="event.stopPropagation()"
+            onchange="updateProgress('${r.id}', this.value, this)">
+            <option value="待启动"    ${r.progress==='待启动'?'selected':''}>待启动</option>
+            <option value="寻源中"    ${r.progress==='寻源中'?'selected':''}>寻源中</option>
+            <option value="✅️完成签约" ${r.progress==='✅️完成签约'?'selected':''}>✅️完成签约</option>
+          </select>
+        </td>
+        <td>${r.endDateStr?`<div>${r.endDateStr}</div><div>${expiryChip(r.daysToExpiry)}</div>`:'<span class="muted">—</span>'}</td>
+        <td class="num">${fmtAmt(r.amount)}</td>
+        <td><span class="muted" style="font-size:11px">${r.duration||'—'}</span></td>
+      </tr>`).join('');
+  }
+
+  // Pagination
+  document.getElementById('pgInfo').textContent = total ? `第 ${start+1}–${Math.min(start+PAGE_SIZE,total)} 条，共 ${total} 条` : '';
+  const btns = document.getElementById('pgBtns');
+  btns.innerHTML = '';
+  const range = [];
+  for (let i=1;i<=pages;i++) {
+    if (i===1||i===pages||Math.abs(i-currentPage)<=2) range.push(i);
+    else if (range[range.length-1]!=='…') range.push('…');
+  }
+  range.forEach(p => {
+    if (p==='…') { btns.innerHTML += `<span style="padding:3px 4px;color:#9ca3af">…</span>`; return; }
+    const cls = p===currentPage?'act':'';
+    btns.innerHTML += `<button class="pg-btn ${cls}" onclick="goPage(${p})">${p}</button>`;
+  });
+}
+
+function goPage(p) { currentPage=p; renderPage(); }
+
+/* ────────────────────────────────────────────────────────────────
+   RENDER: EXPIRY PAGE
+──────────────────────────────────────────────────────────────── */
+function renderExpiry() {
+  const buckets = [
+    { key:'over',  label:'已过期', cls:'exp-hd-over', filter: r=>r.daysToExpiry!==null&&r.daysToExpiry<0 },
+    { key:'30',   label:'30天内到期', cls:'exp-hd-30', filter: r=>r.daysToExpiry!==null&&r.daysToExpiry>=0&&r.daysToExpiry<=30 },
+    { key:'90',   label:'31–90天内到期', cls:'exp-hd-90', filter: r=>r.daysToExpiry!==null&&r.daysToExpiry>30&&r.daysToExpiry<=90 },
+    { key:'180',  label:'91–180天内到期', cls:'exp-hd-180', filter: r=>r.daysToExpiry!==null&&r.daysToExpiry>90&&r.daysToExpiry<=180 },
+    { key:'365',  label:'181–365天内到期', cls:'exp-hd-365', filter: r=>r.daysToExpiry!==null&&r.daysToExpiry>180&&r.daysToExpiry<=365 },
+  ];
+
+  let html = '';
+  buckets.forEach(b => {
+    const items = allRecords.filter(b.filter).sort((a,c)=>a.daysToExpiry-c.daysToExpiry);
+    if (!items.length) return;
+    html += `<div class="exp-section">
+      <div class="exp-section-hd ${b.cls}">${b.label} <span style="font-size:12px;opacity:.8">（${items.length} 个项目）</span></div>
+      <div class="card">
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>项目名称</th><th>一级品类</th><th>具体品类</th>
+              <th>采购员</th><th>项目进度</th>
+              <th>到期日期</th><th>距到期</th>
+              <th>到期前进展</th><th>合同金额</th>
+            </tr></thead>
+            <tbody>`;
+    items.forEach(r => {
+      const ep = r.endProgress.length ? r.endProgress.join(' / ') : '—';
+      html += `<tr onclick="openDetail('${r.id}')">
+        <td><div class="trunc" title="${r.name}">${r.name}</div></td>
+        <td>${catBadge(r.category)}</td>
+        <td><span class="muted">${r.subCategory||'—'}</span></td>
+        <td>${r.buyerName||'—'}</td>
+        <td><span class="badge ${progressClass(r.progress)}">${r.progress}</span></td>
+        <td>${r.endDateStr||'—'}</td>
+        <td>${expiryChip(r.daysToExpiry)}</td>
+        <td><span style="font-size:11px;color:#374151">${ep}</span></td>
+        <td class="num">${fmtAmt(r.amount)}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div></div></div>`;
+  });
+
+  if (!html) html = `<div class="empty-state"><div class="es-icon">🎉</div><p>当前无即将到期或已过期项目</p></div>`;
+  document.getElementById('expiryContent').innerHTML = html;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   RENDER: PROGRESS PAGE
+──────────────────────────────────────────────────────────────── */
+function renderProgress() {
+  const groups = [
+    { label:'⏰ 待启动', color:'#d97706', filter: r=>r.progress==='待启动' },
+    { label:'🔄 寻源中', color:'#2563eb', filter: r=>r.progress==='寻源中'  },
+  ];
+
+  let html = '';
+  groups.forEach(g => {
+    const items = allRecords.filter(g.filter);
+    if (!items.length) return;
+
+    // Sub-group by category
+    const byCat = {};
+    items.forEach(r => {
+      (byCat[r.category] = byCat[r.category]||[]).push(r);
+    });
+
+    html += `<div class="prog-group">
+      <div class="prog-group-hd" style="border-left-color:${g.color}">
+        <h4 style="color:${g.color}">${g.label} — 共 ${items.length} 个项目</h4>
+        <span style="font-size:11px;color:#6b7280">${Object.keys(byCat).length} 个品类</span>
+      </div>`;
+
+    Object.entries(byCat).forEach(([cat, recs]) => {
+      const totalAmt = recs.reduce((s,r)=>s+r.amount,0);
+      html += `<div class="card" style="margin-bottom:10px">
+        <div class="card-head" style="background:#f8fafc">
+          <div class="flex-center">
+            ${catBadge(cat)}
+            <span style="font-size:12px;color:#6b7280">${recs.length} 个项目 · ${fmtAmt(totalAmt)}</span>
+          </div>
+        </div>
+        <div class="tbl-wrap">
+          <table class="tbl">
+            <thead><tr>
+              <th>项目名称</th><th>具体品类</th><th>项目组</th>
+              <th>采购员</th><th>合同到期</th>
+              <th>进度更新</th><th>合同金额</th><th>签约周期</th>
+            </tr></thead>
+            <tbody>`;
+      recs.sort((a,b)=>(a.daysToExpiry||9999)-(b.daysToExpiry||9999)).forEach(r => {
+        html += `<tr onclick="openDetail('${r.id}')">
+          <td><div class="trunc" title="${r.name}">${r.name}</div></td>
+          <td><span class="muted">${r.subCategory||'—'}</span></td>
+          <td><span style="font-size:11px">${r.group}</span></td>
+          <td>${r.buyerName||'—'}</td>
+          <td>${r.endDateStr ? r.endDateStr+'<br>'+expiryChip(r.daysToExpiry) : '<span class="muted">—</span>'}</td>
+          <td>
+            <select class="prog-sel ${progressSelClass(r.progress)}"
+              onclick="event.stopPropagation()"
+              onchange="updateProgress('${r.id}', this.value, this)">
+              <option value="待启动"    ${r.progress==='待启动'?'selected':''}>待启动</option>
+              <option value="寻源中"    ${r.progress==='寻源中'?'selected':''}>寻源中</option>
+              <option value="✅️完成签约" ${r.progress==='✅️完成签约'?'selected':''}>✅️完成签约</option>
+            </select>
+          </td>
+          <td class="num">${fmtAmt(r.amount)}</td>
+          <td><span class="muted" style="font-size:11px">${r.duration||'—'}</span></td>
+        </tr>`;
+      });
+      html += `</tbody></table></div></div>`;
+    });
+    html += '</div>';
+  });
+
+  document.getElementById('progressContent').innerHTML = html || `<div class="empty-state"><div class="es-icon">✅</div><p>所有项目均已完成签约</p></div>`;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   RENDER: ANALYSIS CHARTS
+──────────────────────────────────────────────────────────────── */
+let chartInstances = {};
+
+function renderAnalysis() {
+  if (chartsDrawn) return;
+  chartsDrawn = true;
+
+  const cats = ['网络通讯','物业服务','人力外包','印刷制品','办公用品','仓储物流'];
+  const catColors = cats.map(c=>CAT_COLORS[c]||'#6b7280');
+
+  // Chart 1: by category count
+  const catCounts = cats.map(c=>allRecords.filter(r=>r.category===c).length);
+  chartInstances.cat = new Chart(document.getElementById('chartCat'), {
+    type:'bar',
+    data:{ labels:cats, datasets:[{data:catCounts, backgroundColor:catColors}] },
+    options:{ plugins:{legend:{display:false}}, responsive:true, scales:{y:{beginAtZero:true}} }
+  });
+
+  // Chart 2: progress donut
+  const progs = ['✅️完成签约','寻源中','待启动'];
+  const progCounts = progs.map(p=>allRecords.filter(r=>r.progress===p).length);
+  chartInstances.prog = new Chart(document.getElementById('chartProg'), {
+    type:'doughnut',
+    data:{ labels:['完成签约','寻源中','待启动'], datasets:[{data:progCounts, backgroundColor:['#10b981','#3b82f6','#f59e0b']}] },
+    options:{ plugins:{legend:{position:'bottom'}}, responsive:true }
+  });
+
+  // Chart 3: amount by category (万元)
+  const catAmts = cats.map(c=>Math.round(allRecords.filter(r=>r.category===c).reduce((s,r)=>s+r.amount,0)/10000));
+  chartInstances.amt = new Chart(document.getElementById('chartAmt'), {
+    type:'bar',
+    data:{ labels:cats, datasets:[{data:catAmts, backgroundColor:catColors.map(c=>c+'aa')}] },
+    options:{ plugins:{legend:{display:false}}, responsive:true, scales:{y:{beginAtZero:true}} }
+  });
+
+  // Chart 4: buyer project count (top 12)
+  const buyerMap = {};
+  allRecords.forEach(r=>{ buyerMap[r.buyerName]=(buyerMap[r.buyerName]||0)+1; });
+  const sortedBuyers = Object.entries(buyerMap).sort((a,b)=>b[1]-a[1]).slice(0,12);
+  chartInstances.buyer = new Chart(document.getElementById('chartBuyer'), {
+    type:'bar',
+    data:{ labels:sortedBuyers.map(b=>b[0]), datasets:[{data:sortedBuyers.map(b=>b[1]), backgroundColor:'#7c3aed'}] },
+    options:{ plugins:{legend:{display:false}}, responsive:true, indexAxis:'y', scales:{x:{beginAtZero:true}} }
+  });
+
+  // Summary table
+  const rows = cats.map(c => {
+    const recs = allRecords.filter(r=>r.category===c);
+    const amt = recs.reduce((s,r)=>s+r.amount,0);
+    const done = recs.filter(r=>r.progress==='✅️完成签约').length;
+    const src = recs.filter(r=>r.progress==='寻源中').length;
+    const pend = recs.filter(r=>r.progress==='待启动').length;
+    const exp90 = recs.filter(r=>r.daysToExpiry!==null&&r.daysToExpiry>=0&&r.daysToExpiry<=90).length;
+    return `<tr>
+      <td>${catBadge(c)}</td>
+      <td class="num">${recs.length}</td>
+      <td class="num" style="color:#15803d;font-weight:600">${done}</td>
+      <td class="num" style="color:#1d4ed8">${src}</td>
+      <td class="num" style="color:#d97706">${pend}</td>
+      <td class="num" style="color:#dc2626">${exp90}</td>
+      <td class="num">${fmtAmt(amt)}</td>
+    </tr>`;
+  });
+  document.getElementById('analysisTbl').innerHTML =
+    `<thead><tr>
+      <th>品类</th><th class="num">总数</th><th class="num">完成签约</th>
+      <th class="num">寻源中</th><th class="num">待启动</th>
+      <th class="num">90天到期</th><th class="num">合同金额</th>
+    </tr></thead><tbody>${rows.join('')}</tbody>`;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   UPDATE PROGRESS
+──────────────────────────────────────────────────────────────── */
+async function updateProgress(recordId, newProgress, selectEl) {
+  const rec = allRecords.find(r=>r.id===recordId);
+  const old = rec ? rec.progress : '';
+  if (selectEl) {
+    selectEl.className = `prog-sel ${progressSelClass(newProgress)}`;
+  }
+  try {
+    await teablePatch(`/api/table/${TABLE_ID}/record/${recordId}`, {
+      fieldKeyType: 'name',
+      record: { fields: { '项目进度': newProgress } }
+    });
+    if (rec) rec.progress = newProgress;
+    updateKPIs();
+    showToast(`已更新：${newProgress}`, 'ok');
+  } catch(e) {
+    if (rec && selectEl) { rec.progress = old; selectEl.value = old; selectEl.className=`prog-sel ${progressSelClass(old)}`; }
+    showToast('更新失败：'+e.message, 'err');
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   ADD PROJECT
+──────────────────────────────────────────────────────────────── */
+function openAddModal() {
+  document.getElementById('addModal').classList.add('open');
+  // Reset form
+  ['f-group','f-cat','f-name','f-subcat','f-searchid','f-duration','f-amount','f-start','f-end'].forEach(id=>{
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  document.getElementById('f-progress').value = '待启动';
+}
+function closeAddModal() { document.getElementById('addModal').classList.remove('open'); }
+
+async function submitAddProject() {
+  const group = document.getElementById('f-group').value;
+  const cat   = document.getElementById('f-cat').value;
+  const name  = document.getElementById('f-name').value.trim();
+  if (!group||!cat||!name) { showToast('请填写项目组、一级品类和项目名称', 'err'); return; }
+
+  const fields = { '项目组': group, '一级品类': cat, '项目名称': name };
+  const subcat = document.getElementById('f-subcat').value.trim();
+  const prog   = document.getElementById('f-progress').value;
+  const sid    = document.getElementById('f-searchid').value.trim();
+  const dur    = document.getElementById('f-duration').value.trim();
+  const amt    = parseFloat(document.getElementById('f-amount').value);
+  const start  = document.getElementById('f-start').value;
+  const end    = document.getElementById('f-end').value;
+
+  if (subcat) fields['具体品类'] = subcat;
+  if (prog)   fields['项目进度'] = prog;
+  if (sid)    fields['检索ID'] = sid;
+  if (dur)    fields['签约/计划签约周期'] = dur;
+  if (!isNaN(amt)&&amt>0) fields['预算/合同金额（单位：元）'] = amt;
+  if (start)  fields['合同起始日期'] = start+'T00:00:00.000Z';
+  if (end)    fields['合同到期日期'] = end+'T00:00:00.000Z';
+
+  const btn = document.getElementById('addSubmitBtn');
+  btn.textContent = '保存中…'; btn.disabled = true;
+
+  try {
+    const res = await teablePost(`/api/table/${TABLE_ID}/record`, {
+      fieldKeyType: 'name',
+      records: [{ fields }]
+    });
+    const newRec = (res.records||[])[0];
+    if (newRec) allRecords.push(normalize(newRec));
+    updateKPIs();
+    populateBuyerFilter();
+    renderList();
+    closeAddModal();
+    showToast('项目已成功添加到 Teable ✅', 'ok');
+  } catch(e) {
+    showToast('添加失败：'+e.message, 'err');
+  } finally {
+    btn.textContent = '保存到 Teable'; btn.disabled = false;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   DETAIL / EDIT MODAL
+──────────────────────────────────────────────────────────────── */
+function openDetail(id) {
+  const r = allRecords.find(x=>x.id===id);
+  if (!r) return;
+  editingId = id;
+  document.getElementById('detailTitle').textContent = r.name;
+
+  const ep = r.endProgress.length ? r.endProgress.join(' / ') : '—';
+
+  document.getElementById('detailBody').innerHTML = `
+    <div style="margin-bottom:16px">
+      <div class="flex-center" style="gap:8px;margin-bottom:10px">
+        ${catBadge(r.category)}
+        <span class="badge ${progressClass(r.progress)}">${r.progress}</span>
+        ${r.duration?`<span class="muted" style="font-size:11px">${r.duration}</span>`:''}
+      </div>
+    </div>
+    <div class="detail-grid">
+      <div class="detail-row"><div class="dl">项目组</div><div class="dv">${r.group}</div></div>
+      <div class="detail-row"><div class="dl">具体品类</div><div class="dv">${r.subCategory||'—'}</div></div>
+      <div class="detail-row"><div class="dl">采购员</div>
+        <div class="dv flex-center">${r.buyerAvatar?`<img class="avatar" src="${r.buyerAvatar}" onerror="this.style.display='none'">`:''}${r.buyerName||'—'}</div>
+      </div>
+      <div class="detail-row"><div class="dl">检索ID</div><div class="dv" style="font-family:monospace;font-size:12px">${r.searchId||'—'}</div></div>
+      <div class="detail-row"><div class="dl">合同起始日期</div><div class="dv">${r.startDateStr||'—'}</div></div>
+      <div class="detail-row"><div class="dl">合同到期日期</div>
+        <div class="dv">${r.endDateStr||'—'} ${r.daysToExpiry!==null?expiryChip(r.daysToExpiry):''}</div>
+      </div>
+      <div class="detail-row"><div class="dl">预算/合同金额</div><div class="dv fw600">${fmtAmt(r.amount)}</div></div>
+      <div class="detail-row"><div class="dl">到期前进展</div><div class="dv">${ep}</div></div>
+    </div>
+    <div style="margin-top:16px;padding-top:14px;border-top:1px solid #f3f4f6">
+      <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.3px;color:#374151;margin-bottom:8px">修改项目进度</div>
+      <div class="flex-center" style="gap:10px">
+        <select id="editProgress" class="prog-sel ${progressSelClass(r.progress)}"
+          onchange="this.className='prog-sel '+(['待启动','寻源中','✅️完成签约'].indexOf(this.value)===0?'s-pending':this.value==='寻源中'?'s-sourcing':'s-done')">
+          <option value="待启动"    ${r.progress==='待启动'?'selected':''}>待启动</option>
+          <option value="寻源中"    ${r.progress==='寻源中'?'selected':''}>寻源中</option>
+          <option value="✅️完成签约" ${r.progress==='✅️完成签约'?'selected':''}>✅️完成签约</option>
+        </select>
+        <div style="font-size:11px;color:#9ca3af">修改后点击「保存修改」同步到 Teable</div>
+      </div>
+    </div>`;
+
+  document.getElementById('detailModal').classList.add('open');
+}
+
+function closeDetailModal() {
+  document.getElementById('detailModal').classList.remove('open');
+  editingId = null;
+}
+
+async function saveDetail() {
+  if (!editingId) return;
+  const newProg = document.getElementById('editProgress').value;
+  const btn = document.getElementById('detailSaveBtn');
+  btn.textContent = '保存中…'; btn.disabled = true;
+  try {
+    await teablePatch(`/api/table/${TABLE_ID}/record/${editingId}`, {
+      fieldKeyType: 'name',
+      record: { fields: { '项目进度': newProg } }
+    });
+    const rec = allRecords.find(r=>r.id===editingId);
+    if (rec) rec.progress = newProg;
+    updateKPIs();
+    renderList();
+    if (document.getElementById('pg-progress').classList.contains('active')) renderProgress();
+    closeDetailModal();
+    showToast('已同步到 Teable ✅', 'ok');
+  } catch(e) {
+    showToast('保存失败：'+e.message, 'err');
+  } finally {
+    btn.textContent = '保存修改'; btn.disabled = false;
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   TABS + PAGES
+──────────────────────────────────────────────────────────────── */
+function showPage(name) {
+  ['list','expiry','progress','analysis'].forEach(n => {
+    document.getElementById('pg-'+n).classList.toggle('active', n===name);
+    document.getElementById('tab-'+n).classList.toggle('active', n===name);
+  });
+  if (name==='expiry')   renderExpiry();
+  if (name==='progress') renderProgress();
+  if (name==='analysis') renderAnalysis();
+}
+
+/* ────────────────────────────────────────────────────────────────
+   FILTERS INIT
+──────────────────────────────────────────────────────────────── */
+function populateBuyerFilter() {
+  const buyers = [...new Set(allRecords.map(r=>r.buyerName).filter(Boolean))].sort();
+  const sel = document.getElementById('fBuyer');
+  sel.innerHTML = '<option value="">所有采购员</option>';
+  buyers.forEach(b => sel.add(new Option(b,b)));
+}
+
+/* ────────────────────────────────────────────────────────────────
+   TOAST
+──────────────────────────────────────────────────────────────── */
+function showToast(msg, type='info') {
+  const area = document.getElementById('toastArea');
+  const el = document.createElement('div');
+  el.className = `toast toast-${type==='ok'?'ok':type==='err'?'err':'info'}`;
+  el.textContent = msg;
+  area.appendChild(el);
+  setTimeout(()=>el.remove(), 3500);
+}
+
+/* ────────────────────────────────────────────────────────────────
+   LOADER
+──────────────────────────────────────────────────────────────── */
+function setLoader(msg) {
+  document.getElementById('loaderTxt').textContent = msg;
+  document.getElementById('loaderOverlay').classList.remove('hidden');
+}
+function hideLoader() { document.getElementById('loaderOverlay').classList.add('hidden'); }
+
+/* ────────────────────────────────────────────────────────────────
+   REFRESH
+──────────────────────────────────────────────────────────────── */
+async function refreshData() {
+  chartsDrawn = false;
+  ['cat','prog','amt','buyer'].forEach(k => { if(chartInstances[k]) { chartInstances[k].destroy(); delete chartInstances[k]; } });
+  try {
+    setLoader('正在刷新数据…');
+    allRecords = await loadAllRecords();
+    hideLoader();
+    updateKPIs();
+    populateBuyerFilter();
+    renderList();
+    showToast(`已刷新，共 ${allRecords.length} 条记录`, 'ok');
+  } catch(e) {
+    hideLoader();
+    showToast('刷新失败：'+e.message, 'err');
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   INIT
+──────────────────────────────────────────────────────────────── */
+async function init() {
+  // Close modals on overlay click
+  ['addModal','detailModal'].forEach(id => {
+    document.getElementById(id).addEventListener('click', e => {
+      if (e.target.id===id) document.getElementById(id).classList.remove('open');
+    });
+  });
+
+  try {
+    allRecords = await loadAllRecords();
+    hideLoader();
+
+    // Update header
+    document.getElementById('hdSub').textContent =
+      `Long-term Procurement Tracking · ${allRecords.length} 个项目 · ${new Date().toLocaleDateString('zh-CN')} 更新`;
+    document.getElementById('statusDot').className = 'status-dot ok';
+    document.getElementById('statusLbl').textContent = 'Teable 已连接';
+
+    updateKPIs();
+    populateBuyerFilter();
+    renderList();
+  } catch(e) {
+    hideLoader();
+    document.getElementById('statusDot').className = 'status-dot err';
+    document.getElementById('statusLbl').textContent = '连接失败';
+    document.getElementById('listBody').innerHTML =
+      `<tr><td colspan="9" style="text-align:center;padding:60px;color:#dc2626">
+        ⚠️ 无法连接 Teable：${e.message}
+        <br><br><button class="btn btn-primary btn-sm" onclick="refreshData()">重试</button>
+      </td></tr>`;
+    showToast('Teable 连接失败：'+e.message, 'err');
+  }
+}
+
+// Keyboard shortcuts: Esc to close modals
+document.addEventListener('keydown', e => {
+  if (e.key==='Escape') {
+    closeAddModal();
+    closeDetailModal();
+  }
+});
+
+// Pagination style reuse
+const pgStyle = document.createElement('style');
+pgStyle.textContent = `.pg-btn{padding:3px 9px;border:1px solid #e5e7eb;border-radius:5px;cursor:pointer;font-size:12px;background:#fff;color:#374151}.pg-btn:hover,.pg-btn.act{background:#0f172a;color:#fff;border-color:#0f172a}`;
+document.head.appendChild(pgStyle);
+
+init();
+</script>
+</body>
+</html>
