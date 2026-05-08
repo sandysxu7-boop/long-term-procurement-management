@@ -585,8 +585,8 @@ const TEABLE_BASE = 'https://yach-teable.zhiyinlou.com';
 const TABLE_ID    = 'tblwotOBEtoOOchp8Sj';
 const TOKEN       = 'teable_accv0YqVn9u1avfVdzv_F0wNqCFXBPYHg53lhbK2OqLHfC5TP6yUs3FAR6xApwY=';
 
-const PERM_TABLE_ID  = 'tblLGH1vqw8e22LfXIU';
-const PERM_TOKEN     = 'teable_acc8zey9Z97iCe3gHQb_YxzlePQ6YoNtcTlGmjLdFrsA0IsimoT64DnJYWwSQvo=';
+const PERM_TABLE_ID  = 'tbldOAnHF4nSNj6kMb1';
+const PERM_TOKEN     = 'teable_acc1G9f8DPBFIkNB8xL_V6GiKbDmoGJGSRZXi5vc/03K6XvSVKpqRy6JrnqRhx4=';
 const ADMIN_WORKCODE = '274615';
 
 const CAT_COLORS = {
@@ -684,8 +684,8 @@ async function checkPermission(user) {
     const isBootstrapAdmin = (accountId === ADMIN_WORKCODE);
 
     if (!myRec) {
-      const role   = isBootstrapAdmin ? '管理员' : '普通成员';
-      const status = isBootstrapAdmin ? '已批准' : '待审核';
+      const role   = isBootstrapAdmin ? '管理员' : '普通用户';
+      const status = isBootstrapAdmin ? 'approved' : 'pending';
       await createPermRecord(user, role, status);
       if (isBootstrapAdmin) {
         currentUserRole = '管理员';
@@ -698,11 +698,11 @@ async function checkPermission(user) {
 
     const status = myRec.fields['状态'];
     const role   = myRec.fields['角色'];
-    if (status === '已批准') {
+    if (status === 'approved') {
       currentUserRole = role;
       onLoginSuccess(user);
       return true;
-    } else if (status === '待审核') {
+    } else if (status === 'pending') {
       showPermOverlay('pending', user);
       return false;
     } else {
@@ -721,11 +721,8 @@ async function createPermRecord(user, role, status) {
     records: [{ fields: {
       'account_id': user.account_id || user.sub || '',
       '姓名': user.name || '',
-      '邮箱': user.email || '',
-      '工号': user.account_id || '',
       '角色': role,
-      '状态': status,
-      '申请时间': new Date().toISOString()
+      '状态': status
     }}]
   });
 }
@@ -765,9 +762,9 @@ async function adminLoadUsers() {
 }
 
 function renderAdminPanel() {
-  const pending  = permRecords.filter(r => r.fields['状态'] === '待审核');
-  const approved = permRecords.filter(r => r.fields['状态'] === '已批准');
-  const denied   = permRecords.filter(r => r.fields['状态'] === '已拒绝');
+  const pending  = permRecords.filter(r => r.fields['状态'] === 'pending');
+  const approved = permRecords.filter(r => r.fields['状态'] === 'approved');
+  const denied   = permRecords.filter(r => r.fields['状态'] === 'denied');
   const groups = [
     { key:'pending',  list:pending,  countId:'adminPendingCount',  listId:'adminPendingList'  },
     { key:'approved', list:approved, countId:'adminApprovedCount', listId:'adminApprovedList' },
@@ -815,7 +812,7 @@ async function adminApprove(recordId) {
   try {
     await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
       fieldKeyType: 'name',
-      record: { fields: { '状态': '已批准' } }
+      record: { fields: { '状态': 'approved' } }
     });
     showToast('已批准', 'ok');
     adminLoadUsers();
@@ -826,7 +823,7 @@ async function adminReject(recordId) {
   try {
     await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
       fieldKeyType: 'name',
-      record: { fields: { '状态': '已拒绝' } }
+      record: { fields: { '状态': 'denied' } }
     });
     showToast('已拒绝', 'ok');
     adminLoadUsers();
@@ -838,7 +835,7 @@ async function adminRevoke(recordId) {
   try {
     await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
       fieldKeyType: 'name',
-      record: { fields: { '状态': '已拒绝' } }
+      record: { fields: { '状态': 'denied' } }
     });
     showToast('已撤销访问权限', 'ok');
     adminLoadUsers();
