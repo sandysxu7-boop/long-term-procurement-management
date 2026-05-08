@@ -137,6 +137,18 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .toast-err{background:#fee2e2;color:#dc2626;border:1px solid #fca5a5}
 .toast-info{background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd}
 @keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+/* ── SSO AUTH OVERLAY ── */
+.auth-overlay{position:fixed;inset:0;background:linear-gradient(135deg,#0f172a,#1e3a5f);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:#fff}
+.auth-overlay.hidden{display:none}
+.auth-logo{width:64px;height:64px;border-radius:16px;background:rgba(255,255,255,.1);display:flex;align-items:center;justify-content:center;font-size:32px}
+.auth-title{font-size:20px;font-weight:700}
+.auth-sub{font-size:13px;color:rgba(255,255,255,.55)}
+.auth-spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+.auth-err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;padding:10px 16px;border-radius:8px;font-size:12px;max-width:320px;text-align:center}
+/* ── USER CHIP ── */
+.user-chip{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:4px 12px 4px 4px;cursor:default}
+.user-avatar{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
+.user-name{font-size:12px;color:rgba(255,255,255,.85);font-weight:500}
 /* ── MISC ── */
 .num{text-align:right;font-variant-numeric:tabular-nums}
 .muted{color:#9ca3af}
@@ -152,6 +164,15 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 </style>
 </head>
 <body>
+
+<!-- SSO AUTH OVERLAY -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-logo">📋</div>
+  <div class="auth-title">长周期采购项目监测系统</div>
+  <div class="auth-sub" id="authSubTxt">正在验证身份…</div>
+  <div class="auth-spinner" id="authSpinner"></div>
+  <div class="auth-err hidden" id="authErr"></div>
+</div>
 
 <!-- LOADER -->
 <div class="loader-overlay" id="loaderOverlay">
@@ -171,8 +192,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
   <div class="hd-right">
     <span id="statusDot" class="status-dot"></span>
     <span class="status-lbl" id="statusLbl">连接中…</span>
+    <div class="user-chip" id="userChip" style="display:none">
+      <div class="user-avatar" id="userAvatar">?</div>
+      <span class="user-name" id="userName"></span>
+    </div>
     <button class="btn btn-ghost btn-sm" onclick="refreshData()">↻ 刷新</button>
     <button class="btn btn-primary btn-sm" onclick="openAddModal()">＋ 新增项目</button>
+    <button class="btn btn-ghost btn-sm" onclick="logout()" title="退出登录">退出</button>
   </div>
 </div>
 
@@ -414,6 +440,84 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 </div>
 
 <script>
+/* ────────────────────────────────────────────────────────────────
+   SSO
+──────────────────────────────────────────────────────────────── */
+const SSO_APP_ID   = '878228077';
+const FC_BASE      = 'https://sso-backend-vaxetvknoh.cn-hangzhou.fcapp.run';
+const SSO_LOGIN_URL = `https://sso.100tal.com/portal/login/${SSO_APP_ID}`;
+const JWT_KEY      = 'lcpm_sso_jwt';
+
+function decodeJWT(token) {
+  try {
+    const payload = token.split('.')[1];
+    const bytes = Uint8Array.from(atob(payload.replace(/-/g,'+').replace(/_/g,'/')), c=>c.charCodeAt(0));
+    return JSON.parse(new TextDecoder('utf-8').decode(bytes));
+  } catch { return null; }
+}
+
+function getSavedAuth() {
+  const token = localStorage.getItem(JWT_KEY);
+  if (!token) return null;
+  const p = decodeJWT(token);
+  if (!p || p.exp * 1000 < Date.now()) { localStorage.removeItem(JWT_KEY); return null; }
+  return { token, user: p };
+}
+
+function showAuthErr(msg) {
+  document.getElementById('authSpinner').style.display = 'none';
+  const el = document.getElementById('authErr');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  document.getElementById('authSubTxt').textContent = '验证失败';
+}
+
+function onLoginSuccess(user) {
+  document.getElementById('authOverlay').classList.add('hidden');
+  const name = (user.name || user.account_id || '').split('(')[0];
+  document.getElementById('userChip').style.display = 'flex';
+  document.getElementById('userName').textContent = name;
+  document.getElementById('userAvatar').textContent = name.charAt(0) || '?';
+}
+
+function logout() {
+  localStorage.removeItem(JWT_KEY);
+  window.location.href = `https://sso.100tal.com/sso/logout?path=${SSO_LOGIN_URL}`;
+}
+
+async function initSSO() {
+  // 1. 已有有效 JWT
+  const saved = getSavedAuth();
+  if (saved) { onLoginSuccess(saved.user); return true; }
+
+  // 2. SSO 回调 token
+  const params = new URLSearchParams(window.location.search);
+  const ssoToken = params.get('token');
+  if (ssoToken) {
+    history.replaceState({}, '', window.location.pathname);
+    document.getElementById('authSubTxt').textContent = '正在验证身份…';
+    try {
+      const res = await fetch(`${FC_BASE}/auth/callback?token=${encodeURIComponent(ssoToken)}`);
+      const data = await res.json();
+      if (data.token) {
+        localStorage.setItem(JWT_KEY, data.token);
+        onLoginSuccess(decodeJWT(data.token));
+        return true;
+      }
+      showAuthErr('身份验证失败：' + (data.error || '未知错误'));
+      return false;
+    } catch(e) {
+      showAuthErr('网络错误，无法连接认证服务：' + e.message);
+      return false;
+    }
+  }
+
+  // 3. 跳转 SSO 登录
+  document.getElementById('authSubTxt').textContent = '正在跳转登录…';
+  setTimeout(() => { window.location.href = SSO_LOGIN_URL; }, 800);
+  return false;
+}
+
 /* ────────────────────────────────────────────────────────────────
    CONFIG
 ──────────────────────────────────────────────────────────────── */
@@ -1142,6 +1246,10 @@ async function init() {
       if (e.target.id===id) document.getElementById(id).classList.remove('open');
     });
   });
+
+  // SSO 身份验证
+  const authed = await initSSO();
+  if (!authed) return;
 
   try {
     allRecords = await loadAllRecords();
