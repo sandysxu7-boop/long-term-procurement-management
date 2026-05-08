@@ -145,6 +145,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .auth-sub{font-size:13px;color:rgba(255,255,255,.55)}
 .auth-spinner{width:32px;height:32px;border:3px solid rgba(255,255,255,.2);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
 .auth-err{background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:#fca5a5;padding:10px 16px;border-radius:8px;font-size:12px;max-width:320px;text-align:center}
+.auth-perm-box{padding:20px 28px;border-radius:14px;max-width:380px;text-align:center}
+.auth-perm-pending{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.45);color:#fcd34d}
+.auth-perm-denied{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.45);color:#fca5a5}
+.auth-perm-box h3{font-size:16px;font-weight:700;margin-bottom:8px}
+.auth-perm-box p{font-size:12px;opacity:.8;margin-bottom:14px;line-height:1.6}
+.auth-perm-box .meta{font-size:11px;opacity:.55;margin-bottom:14px}
+/* ── ADMIN PANEL ── */
+.admin-user-row{display:flex;align-items:center;padding:11px 16px;border-bottom:1px solid #f3f4f6;gap:10px}
+.admin-user-row:last-child{border-bottom:none}
+.admin-user-info{flex:1;min-width:0}
+.admin-user-name{font-size:13px;font-weight:600;color:#111827}
+.admin-user-meta{font-size:11px;color:#6b7280;margin-top:2px}
+.role-badge-admin{background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
+.role-badge-member{background:#eff6ff;color:#2563eb;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
+.admin-actions{display:flex;gap:5px;flex-shrink:0}
 /* ── USER CHIP ── */
 .user-chip{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:4px 12px 4px 4px;cursor:default}
 .user-avatar{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
@@ -172,6 +187,17 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
   <div class="auth-sub" id="authSubTxt">正在验证身份…</div>
   <div class="auth-spinner" id="authSpinner"></div>
   <div class="auth-err hidden" id="authErr"></div>
+  <div class="auth-perm-box auth-perm-pending hidden" id="authPermPending">
+    <h3>⏳ 申请审核中</h3>
+    <p>您的访问申请已提交，请等待管理员审批后再访问本系统。</p>
+    <div class="meta" id="authPermPendingUser"></div>
+    <button class="btn btn-ghost btn-sm" onclick="logout()">切换账号</button>
+  </div>
+  <div class="auth-perm-box auth-perm-denied hidden" id="authPermDenied">
+    <h3>🚫 访问被拒绝</h3>
+    <p>您的访问申请已被拒绝，如有疑问请联系系统管理员。</p>
+    <button class="btn btn-ghost btn-sm" onclick="logout()">退出登录</button>
+  </div>
 </div>
 
 <!-- LOADER -->
@@ -242,6 +268,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
   <div class="tab"         id="tab-expiry"  onclick="showPage('expiry')">🔔 到期预警</div>
   <div class="tab"         id="tab-progress" onclick="showPage('progress')">🎯 进度追踪</div>
   <div class="tab"         id="tab-analysis" onclick="showPage('analysis')">📊 效益分析</div>
+  <div class="tab"         id="tab-admin"    onclick="showPage('admin')" style="display:none">🔐 权限管理</div>
 </div>
 
 <!-- ═══ PAGE: 全部项目 ═══ -->
@@ -439,6 +466,37 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
   </div>
 </div>
 
+<!-- ═══ PAGE: 权限管理 ═══ -->
+<div id="pg-admin" class="page">
+  <div class="card">
+    <div class="card-head">
+      <h3>🔐 访问权限管理</h3>
+      <button class="btn btn-sm" style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb" onclick="adminLoadUsers()">↻ 刷新</button>
+    </div>
+    <div style="padding:16px">
+      <div style="font-size:12px;font-weight:700;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+        <span>⏳ 待审核申请</span>
+        <span id="adminPendingCount" style="background:#d97706;color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">0</span>
+      </div>
+      <div id="adminPendingList"></div>
+    </div>
+    <div style="padding:0 16px 16px">
+      <div style="font-size:12px;font-weight:700;color:#065f46;background:#d1fae5;border:1px solid #6ee7b7;border-radius:8px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+        <span>✅ 已批准用户</span>
+        <span id="adminApprovedCount" style="background:#059669;color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">0</span>
+      </div>
+      <div id="adminApprovedList"></div>
+    </div>
+    <div style="padding:0 16px 16px">
+      <div style="font-size:12px;font-weight:700;color:#991b1b;background:#fee2e2;border:1px solid #fca5a5;border-radius:8px;padding:8px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between">
+        <span>🚫 已拒绝用户</span>
+        <span id="adminDeniedCount" style="background:#dc2626;color:#fff;padding:1px 8px;border-radius:10px;font-size:11px">0</span>
+      </div>
+      <div id="adminDeniedList"></div>
+    </div>
+  </div>
+</div>
+
 <script>
 /* ────────────────────────────────────────────────────────────────
    SSO
@@ -478,6 +536,9 @@ function onLoginSuccess(user) {
   document.getElementById('userChip').style.display = 'flex';
   document.getElementById('userName').textContent = name;
   document.getElementById('userAvatar').textContent = name.charAt(0) || '?';
+  if (currentUserRole === '管理员') {
+    document.getElementById('tab-admin').style.display = '';
+  }
 }
 
 function logout() {
@@ -488,7 +549,7 @@ function logout() {
 async function initSSO() {
   // 1. 已有有效 JWT
   const saved = getSavedAuth();
-  if (saved) { onLoginSuccess(saved.user); return true; }
+  if (saved) { return await checkPermission(saved.user); }
 
   // 2. SSO 回调 token
   const params = new URLSearchParams(window.location.search);
@@ -501,8 +562,7 @@ async function initSSO() {
       const data = await res.json();
       if (data.token) {
         localStorage.setItem(JWT_KEY, data.token);
-        onLoginSuccess(decodeJWT(data.token));
-        return true;
+        return await checkPermission(decodeJWT(data.token));
       }
       showAuthErr('身份验证失败：' + (data.error || '未知错误'));
       return false;
@@ -525,6 +585,10 @@ const TEABLE_BASE = 'https://yach-teable.zhiyinlou.com';
 const TABLE_ID    = 'tblwotOBEtoOOchp8Sj';
 const TOKEN       = 'teable_accv0YqVn9u1avfVdzv_F0wNqCFXBPYHg53lhbK2OqLHfC5TP6yUs3FAR6xApwY=';
 
+const PERM_TABLE_ID  = 'tblLGH1vqw8e22LfXIU';
+const PERM_TOKEN     = 'teable_acc8zey9Z97iCe3gHQb_YxzlePQ6YoNtcTlGmjLdFrsA0IsimoT64DnJYWwSQvo=';
+const ADMIN_WORKCODE = '274615';
+
 const CAT_COLORS = {
   '网络通讯':'#2563eb','物业服务':'#059669','人力外包':'#7c3aed',
   '印刷制品':'#db2777','办公用品':'#d97706','仓储物流':'#0891b2'
@@ -542,6 +606,9 @@ const PAGE_SIZE  = 50;
 let kpiFilter    = '';
 let chartsDrawn  = false;
 let editingId    = null; // record id in detail modal
+let currentUserRole = null;
+let currentUserId   = null;
+let permRecords     = [];
 
 /* ────────────────────────────────────────────────────────────────
    TEABLE API
@@ -572,6 +639,221 @@ async function teablePost(path, body) {
   });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
   return r.json();
+}
+
+/* ────────────────────────────────────────────────────────────────
+   PERM API
+──────────────────────────────────────────────────────────────── */
+async function permGet(path) {
+  const r = await fetch(TEABLE_BASE + path, {
+    headers:{ 'Authorization':'Bearer '+PERM_TOKEN, 'Accept':'application/json' }
+  });
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function permPost(path, body) {
+  const r = await fetch(TEABLE_BASE + path, {
+    method:'POST',
+    headers:{ 'Authorization':'Bearer '+PERM_TOKEN, 'Content-Type':'application/json', 'Accept':'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
+  return r.json();
+}
+async function permPatch(path, body) {
+  const r = await fetch(TEABLE_BASE + path, {
+    method:'PATCH',
+    headers:{ 'Authorization':'Bearer '+PERM_TOKEN, 'Content-Type':'application/json', 'Accept':'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
+  return r.json();
+}
+
+/* ────────────────────────────────────────────────────────────────
+   PERMISSION CHECK
+──────────────────────────────────────────────────────────────── */
+async function checkPermission(user) {
+  const accountId = user.account_id || user.sub || '';
+  currentUserId = accountId;
+  document.getElementById('authSubTxt').textContent = '正在检查访问权限…';
+  try {
+    const data = await permGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`);
+    permRecords = (data.records || []).filter(r => r.fields && r.fields['account_id']);
+    const myRec = permRecords.find(r => r.fields['account_id'] === accountId);
+    const isBootstrapAdmin = (accountId === ADMIN_WORKCODE);
+
+    if (!myRec) {
+      const role   = isBootstrapAdmin ? '管理员' : '普通成员';
+      const status = isBootstrapAdmin ? '已批准' : '待审核';
+      await createPermRecord(user, role, status);
+      if (isBootstrapAdmin) {
+        currentUserRole = '管理员';
+        onLoginSuccess(user);
+        return true;
+      }
+      showPermOverlay('pending', user);
+      return false;
+    }
+
+    const status = myRec.fields['状态'];
+    const role   = myRec.fields['角色'];
+    if (status === '已批准') {
+      currentUserRole = role;
+      onLoginSuccess(user);
+      return true;
+    } else if (status === '待审核') {
+      showPermOverlay('pending', user);
+      return false;
+    } else {
+      showPermOverlay('denied', user);
+      return false;
+    }
+  } catch(e) {
+    showAuthErr('权限检查失败：' + e.message);
+    return false;
+  }
+}
+
+async function createPermRecord(user, role, status) {
+  await permPost(`/api/table/${PERM_TABLE_ID}/record`, {
+    fieldKeyType: 'name',
+    records: [{ fields: {
+      'account_id': user.account_id || user.sub || '',
+      '姓名': user.name || '',
+      '邮箱': user.email || '',
+      '工号': user.account_id || '',
+      '角色': role,
+      '状态': status,
+      '申请时间': new Date().toISOString()
+    }}]
+  });
+}
+
+function showPermOverlay(state, user) {
+  document.getElementById('authSpinner').style.display = 'none';
+  document.getElementById('authSubTxt').style.display = 'none';
+  if (state === 'pending') {
+    document.getElementById('authPermPending').classList.remove('hidden');
+    document.getElementById('authPermPendingUser').textContent =
+      `账号：${user.account_id || ''} · 姓名：${user.name || ''}`;
+  } else {
+    document.getElementById('authPermDenied').classList.remove('hidden');
+  }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   ADMIN PANEL
+──────────────────────────────────────────────────────────────── */
+async function adminLoadUsers() {
+  const container = document.getElementById('adminPendingList');
+  if (!container) return;
+  ['adminPendingList','adminApprovedList','adminDeniedList'].forEach(id => {
+    document.getElementById(id).innerHTML =
+      '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">加载中…</div>';
+  });
+  try {
+    const data = await permGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`);
+    permRecords = (data.records || []).filter(r => r.fields && r.fields['account_id']);
+    renderAdminPanel();
+  } catch(e) {
+    ['adminPendingList','adminApprovedList','adminDeniedList'].forEach(id => {
+      document.getElementById(id).innerHTML =
+        `<div style="padding:16px;text-align:center;color:#dc2626;font-size:12px">加载失败：${e.message}</div>`;
+    });
+  }
+}
+
+function renderAdminPanel() {
+  const pending  = permRecords.filter(r => r.fields['状态'] === '待审核');
+  const approved = permRecords.filter(r => r.fields['状态'] === '已批准');
+  const denied   = permRecords.filter(r => r.fields['状态'] === '已拒绝');
+  const groups = [
+    { key:'pending',  list:pending,  countId:'adminPendingCount',  listId:'adminPendingList'  },
+    { key:'approved', list:approved, countId:'adminApprovedCount', listId:'adminApprovedList' },
+    { key:'denied',   list:denied,   countId:'adminDeniedCount',   listId:'adminDeniedList'   }
+  ];
+  groups.forEach(({key, list, countId, listId}) => {
+    document.getElementById(countId).textContent = list.length;
+    const el = document.getElementById(listId);
+    if (!list.length) {
+      el.innerHTML = '<div style="padding:12px 0;text-align:center;color:#9ca3af;font-size:12px">暂无记录</div>';
+      return;
+    }
+    el.innerHTML = list.map(r => {
+      const f    = r.fields;
+      const name = f['姓名'] || f['account_id'] || '—';
+      const code = f['工号'] || f['account_id'] || '';
+      const role = f['角色'] || '普通成员';
+      const time = (f['申请时间'] || '').substring(0, 10);
+      const rBadge = role === '管理员'
+        ? `<span class="role-badge-admin">管理员</span>`
+        : `<span class="role-badge-member">普通成员</span>`;
+      let actions = '';
+      if (key === 'pending') {
+        actions = `<button class="btn btn-green btn-sm" onclick="adminApprove('${r.id}')">批准</button>
+          <button class="btn btn-danger btn-sm" onclick="adminReject('${r.id}')">拒绝</button>`;
+      } else if (key === 'approved') {
+        const otherRole = role === '管理员' ? '普通成员' : '管理员';
+        actions = `<button class="btn btn-sm" style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb" onclick="adminChangeRole('${r.id}','${otherRole}')">改为${otherRole}</button>
+          <button class="btn btn-danger btn-sm" onclick="adminRevoke('${r.id}')">撤销</button>`;
+      } else {
+        actions = `<button class="btn btn-green btn-sm" onclick="adminApprove('${r.id}')">恢复</button>`;
+      }
+      return `<div class="admin-user-row">
+        <div class="admin-user-info">
+          <div class="admin-user-name">${name} ${rBadge}</div>
+          <div class="admin-user-meta">工号：${code} · 申请时间：${time}</div>
+        </div>
+        <div class="admin-actions">${actions}</div>
+      </div>`;
+    }).join('');
+  });
+}
+
+async function adminApprove(recordId) {
+  try {
+    await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
+      fieldKeyType: 'name',
+      record: { fields: { '状态': '已批准' } }
+    });
+    showToast('已批准', 'ok');
+    adminLoadUsers();
+  } catch(e) { showToast('操作失败：'+e.message, 'err'); }
+}
+
+async function adminReject(recordId) {
+  try {
+    await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
+      fieldKeyType: 'name',
+      record: { fields: { '状态': '已拒绝' } }
+    });
+    showToast('已拒绝', 'ok');
+    adminLoadUsers();
+  } catch(e) { showToast('操作失败：'+e.message, 'err'); }
+}
+
+async function adminRevoke(recordId) {
+  if (!confirm('确认撤销该用户的访问权限？')) return;
+  try {
+    await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
+      fieldKeyType: 'name',
+      record: { fields: { '状态': '已拒绝' } }
+    });
+    showToast('已撤销访问权限', 'ok');
+    adminLoadUsers();
+  } catch(e) { showToast('操作失败：'+e.message, 'err'); }
+}
+
+async function adminChangeRole(recordId, newRole) {
+  try {
+    await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
+      fieldKeyType: 'name',
+      record: { fields: { '角色': newRole } }
+    });
+    showToast(`已改为${newRole}`, 'ok');
+    adminLoadUsers();
+  } catch(e) { showToast('操作失败：'+e.message, 'err'); }
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -1176,13 +1458,16 @@ async function saveDetail() {
    TABS + PAGES
 ──────────────────────────────────────────────────────────────── */
 function showPage(name) {
-  ['list','expiry','progress','analysis'].forEach(n => {
-    document.getElementById('pg-'+n).classList.toggle('active', n===name);
-    document.getElementById('tab-'+n).classList.toggle('active', n===name);
+  ['list','expiry','progress','analysis','admin'].forEach(n => {
+    const pg = document.getElementById('pg-'+n);
+    const tb = document.getElementById('tab-'+n);
+    if (pg) pg.classList.toggle('active', n===name);
+    if (tb) tb.classList.toggle('active', n===name);
   });
   if (name==='expiry')   renderExpiry();
   if (name==='progress') renderProgress();
   if (name==='analysis') renderAnalysis();
+  if (name==='admin')    adminLoadUsers();
 }
 
 /* ────────────────────────────────────────────────────────────────
