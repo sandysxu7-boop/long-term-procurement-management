@@ -159,7 +159,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
 .admin-user-meta{font-size:11px;color:#6b7280;margin-top:2px}
 .role-badge-admin{background:#fef2f2;color:#dc2626;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
 .role-badge-member{background:#eff6ff;color:#2563eb;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700}
-.admin-actions{display:flex;gap:5px;flex-shrink:0}
+.admin-actions{display:flex;gap:5px;flex-shrink:0;align-items:center}
+.role-sel{font-size:11px;padding:3px 6px;border:1px solid #e5e7eb;border-radius:6px;background:#fff;color:#374151;cursor:pointer;max-width:130px}
 /* ── USER CHIP ── */
 .user-chip{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:20px;padding:4px 12px 4px 4px;cursor:default}
 .user-avatar{width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0}
@@ -223,7 +224,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
       <span class="user-name" id="userName"></span>
     </div>
     <button class="btn btn-ghost btn-sm" onclick="refreshData()">↻ 刷新</button>
-    <button class="btn btn-primary btn-sm" onclick="openAddModal()">＋ 新增项目</button>
+    <button class="btn btn-primary btn-sm" id="addBtn" onclick="openAddModal()">＋ 新增项目</button>
     <button class="btn btn-ghost btn-sm" onclick="logout()" title="退出登录">退出</button>
   </div>
 </div>
@@ -460,6 +461,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
     </div>
     <div class="modal-body" id="detailBody"></div>
     <div class="modal-foot">
+      <button class="btn btn-danger btn-sm" id="detailDeleteBtn" onclick="deleteRecord()" style="margin-right:auto">删除项目</button>
       <button class="btn btn-sm" style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb" onclick="closeDetailModal()">关闭</button>
       <button class="btn btn-primary btn-sm" onclick="saveDetail()" id="detailSaveBtn">保存修改</button>
     </div>
@@ -539,8 +541,17 @@ function onLoginSuccess(user) {
   document.getElementById('userChip').style.display = 'flex';
   document.getElementById('userName').textContent = name;
   document.getElementById('userAvatar').textContent = name.charAt(0) || '?';
-  if (currentUserRole === '管理员') {
+
+  if (isSuperAdmin()) {
     document.getElementById('tab-admin').style.display = '';
+  }
+  if (currentUserRole !== '管理员') {
+    document.getElementById('addBtn').style.display = 'none';
+  }
+  if (isGroupAdmin()) {
+    const fg = document.getElementById('fGroup');
+    fg.value = currentUserManagedGroup;
+    fg.disabled = true;
   }
 }
 
@@ -611,9 +622,20 @@ const PAGE_SIZE  = 50;
 let kpiFilter    = '';
 let chartsDrawn  = false;
 let editingId    = null; // record id in detail modal
-let currentUserRole  = null;
-let currentUserId    = null;
-let adminPermRecords = [];
+let currentUserRole         = null;
+let currentUserId           = null;
+let currentUserWorkcode     = null;
+let currentUserManagedGroup = null;
+let adminPermRecords        = [];
+
+function isSuperAdmin()  { return currentUserRole === '管理员' && !currentUserManagedGroup; }
+function isGroupAdmin()  { return currentUserRole === '管理员' && !!currentUserManagedGroup; }
+function canManageRecord(r) {
+  if (isSuperAdmin()) return true;
+  if (isGroupAdmin()) return r.group === currentUserManagedGroup;
+  if (!currentUserWorkcode) return false;
+  return r.buyerTitle && r.buyerTitle.split('-').pop() === currentUserWorkcode;
+}
 
 /* ────────────────────────────────────────────────────────────────
    TEABLE API
@@ -654,6 +676,15 @@ async function teablePost(path, body, usePerm = false) {
   return r.json();
 }
 
+async function teableDelete(path, usePerm = false) {
+  const r = await fetch(_teableUrl(path, usePerm), {
+    method:'DELETE',
+    headers:{ ..._teableAuth(), 'Accept':'application/json' }
+  });
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
+  return r.status === 204 ? {} : r.json().catch(()=>({}));
+}
+
 /* ────────────────────────────────────────────────────────────────
    PERMISSION CHECK
 ──────────────────────────────────────────────────────────────── */
@@ -673,6 +704,8 @@ async function checkPermission(user) {
       await createPermRecord(user, role, status);
       if (isBootstrapAdmin) {
         currentUserRole = '管理员';
+        currentUserWorkcode = user.workcode || '';
+        currentUserManagedGroup = null;
         onLoginSuccess(user);
         return true;
       }
@@ -680,14 +713,26 @@ async function checkPermission(user) {
       return false;
     }
 
-    if (!myRec.fields['备注'] && user.workcode) {
+    // Parse 备注: "workcode" for super admin/buyer, "workcode|项目XX组" for group admin
+    const beizhu   = myRec.fields['备注'] || '';
+    const pipeIdx  = beizhu.indexOf('|');
+    const storedWc = pipeIdx >= 0 ? beizhu.slice(0, pipeIdx) : beizhu;
+    const role     = myRec.fields['角色'];
+    const storedGroup = (role === '管理员' && pipeIdx >= 0) ? beizhu.slice(pipeIdx + 1) : null;
+
+    currentUserWorkcode     = storedWc || user.workcode || '';
+    currentUserManagedGroup = storedGroup || null;
+
+    // Backfill workcode if missing
+    if (user.workcode && !storedWc) {
+      const newBeizhu = storedGroup ? `${user.workcode}|${storedGroup}` : user.workcode;
       await teablePatch(`/api/table/${PERM_TABLE_ID}/record/${myRec.id}`, {
-        fieldKeyType: 'name', record: { fields: { '备注': user.workcode } }
+        fieldKeyType: 'name', record: { fields: { '备注': newBeizhu } }
       }, true).catch(() => {});
+      currentUserWorkcode = user.workcode;
     }
 
     const status = myRec.fields['状态'];
-    const role   = myRec.fields['角色'];
     if (status === STATUS.APPROVED) {
       currentUserRole = role;
       onLoginSuccess(user);
@@ -773,20 +818,31 @@ function renderAdminPanel() {
     el.innerHTML = list.map(r => {
       const f       = r.fields;
       const name    = escHtml(f['姓名'] || f['account_id'] || '—');
-      const code    = escHtml(f['备注'] || f['account_id'] || '');
-      const role    = f['角色'] === '管理员' ? '管理员' : '普通用户';
+      const beizhu  = f['备注'] || '';
+      const pipeIdx = beizhu.indexOf('|');
+      const wc      = pipeIdx >= 0 ? beizhu.slice(0, pipeIdx) : beizhu;
+      const mgGroup = f['角色'] === '管理员' && pipeIdx >= 0 ? beizhu.slice(pipeIdx + 1) : null;
+      const code    = escHtml(wc || f['account_id'] || '');
       const time    = escHtml((r.createdTime || '').substring(0, 10));
-      const rBadge  = role === '管理员'
-        ? `<span class="role-badge-admin">管理员</span>`
+      const isAdm   = f['角色'] === '管理员';
+      const roleLabel = isAdm ? (mgGroup ? mgGroup + '管理员' : '超级管理员') : '普通用户';
+      const rBadge  = isAdm
+        ? `<span class="role-badge-admin">${escHtml(roleLabel)}</span>`
         : `<span class="role-badge-member">普通用户</span>`;
       const rid = escHtml(r.id);
+      const roleValue = isAdm ? (mgGroup ? `组管理员|${mgGroup}` : '管理员') : '普通用户';
       let actions = '';
       if (key === 'pending') {
         actions = `<button class="btn btn-green btn-sm" onclick="adminApprove('${rid}')">批准</button>
           <button class="btn btn-danger btn-sm" onclick="adminSetDenied('${rid}',false)">拒绝</button>`;
       } else if (key === 'approved') {
-        const otherRole = role === '管理员' ? '普通用户' : '管理员';
-        actions = `<button class="btn btn-sm" style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb" onclick="adminChangeRole('${rid}','${escHtml(otherRole)}')">改为${escHtml(otherRole)}</button>
+        actions = `<select class="role-sel" onchange="adminSetRole('${rid}',this.value)">
+            <option value="管理员" ${roleValue==='管理员'?'selected':''}>超级管理员</option>
+            <option value="组管理员|项目一组" ${roleValue==='组管理员|项目一组'?'selected':''}>项目一组管理员</option>
+            <option value="组管理员|项目二/三组" ${roleValue==='组管理员|项目二/三组'?'selected':''}>项目二/三组管理员</option>
+            <option value="组管理员|项目四组" ${roleValue==='组管理员|项目四组'?'selected':''}>项目四组管理员</option>
+            <option value="普通用户" ${roleValue==='普通用户'?'selected':''}>普通用户</option>
+          </select>
           <button class="btn btn-danger btn-sm" onclick="adminSetDenied('${rid}',true)">撤销</button>`;
       } else {
         actions = `<button class="btn btn-green btn-sm" onclick="adminApprove('${rid}')">恢复</button>`;
@@ -823,15 +879,29 @@ async function adminSetDenied(recordId, needConfirm) {
   } catch(e) { showToast('操作失败：'+e.message, 'err'); }
 }
 
-async function adminChangeRole(recordId, newRole) {
-  const safeRole = newRole === '管理员' ? '管理员' : '普通用户';
+async function adminSetRole(recordId, newRoleValue) {
+  const rec = adminPermRecords.find(r => r.id === recordId);
+  if (!rec) return;
+  const beizhu  = rec.fields['备注'] || '';
+  const pipeIdx = beizhu.indexOf('|');
+  const wc      = pipeIdx >= 0 ? beizhu.slice(0, pipeIdx) : beizhu;
+
+  let newRole, newBeizhu, label;
+  if (newRoleValue === '管理员') {
+    newRole = '管理员'; newBeizhu = wc; label = '超级管理员';
+  } else if (newRoleValue.startsWith('组管理员|')) {
+    const group = newRoleValue.slice('组管理员|'.length);
+    newRole = '管理员'; newBeizhu = wc ? `${wc}|${group}` : `|${group}`; label = group + '管理员';
+  } else {
+    newRole = '普通用户'; newBeizhu = wc; label = '普通用户';
+  }
   try {
     await teablePatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
-      fieldKeyType: 'name', record: { fields: { '角色': safeRole } }
+      fieldKeyType: 'name', record: { fields: { '角色': newRole, '备注': newBeizhu } }
     }, true);
-    showToast(`已改为${safeRole}`, 'ok');
+    showToast(`已设置为${label}`, 'ok');
     adminLoadUsers();
-  } catch(e) { showToast('操作失败：'+e.message, 'err'); }
+  } catch(e) { showToast('操作失败：' + e.message, 'err'); }
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -879,7 +949,7 @@ async function loadAllRecords() {
     if (recs.length < take) break;
     skip += take;
   }
-  return all;
+  return isSuperAdmin() ? all : all.filter(canManageRecord);
 }
 
 /* ────────────────────────────────────────────────────────────────
@@ -990,7 +1060,8 @@ function sortBy(key) {
 function clearFilters() {
   kpiFilter = '';
   document.getElementById('searchInput').value = '';
-  ['fGroup','fCategory','fProgress','fBuyer','fExpiry'].forEach(id => document.getElementById(id).value = '');
+  ['fCategory','fProgress','fBuyer','fExpiry'].forEach(id => document.getElementById(id).value = '');
+  if (!isGroupAdmin()) document.getElementById('fGroup').value = '';
   document.querySelectorAll('.kpi').forEach(k=>k.classList.remove('active-kpi'));
   renderList();
 }
@@ -1300,14 +1371,21 @@ async function updateProgress(recordId, newProgress, selectEl) {
 ──────────────────────────────────────────────────────────────── */
 function openAddModal() {
   document.getElementById('addModal').classList.add('open');
-  // Reset form
   ['f-group','f-cat','f-name','f-subcat','f-searchid','f-duration','f-amount','f-start','f-end'].forEach(id=>{
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
   document.getElementById('f-progress').value = '待启动';
+  const groupSel = document.getElementById('f-group');
+  if (isGroupAdmin()) {
+    groupSel.value = currentUserManagedGroup;
+    groupSel.disabled = true;
+  }
 }
-function closeAddModal() { document.getElementById('addModal').classList.remove('open'); }
+function closeAddModal() {
+  document.getElementById('addModal').classList.remove('open');
+  document.getElementById('f-group').disabled = false;
+}
 
 async function submitAddProject() {
   const group = document.getElementById('f-group').value;
@@ -1432,6 +1510,24 @@ async function saveDetail() {
   }
 }
 
+async function deleteRecord() {
+  if (!editingId || !confirm('确认删除此项目？此操作无法撤销。')) return;
+  const btn = document.getElementById('detailDeleteBtn');
+  btn.textContent = '删除中…'; btn.disabled = true;
+  try {
+    await teableDelete(`/api/table/${TABLE_ID}/record/${editingId}`);
+    allRecords = allRecords.filter(r => r.id !== editingId);
+    updateKPIs();
+    populateBuyerFilter();
+    renderList();
+    closeDetailModal();
+    showToast('项目已删除', 'ok');
+  } catch(e) {
+    showToast('删除失败：' + e.message, 'err');
+    btn.textContent = '删除项目'; btn.disabled = false;
+  }
+}
+
 /* ────────────────────────────────────────────────────────────────
    TABS + PAGES
 ──────────────────────────────────────────────────────────────── */
@@ -1492,7 +1588,7 @@ async function refreshData() {
     updateKPIs();
     populateBuyerFilter();
     renderList();
-    showToast(`已刷新，共 ${allRecords.length} 条记录`, 'ok');
+    showToast(`已刷新，共 ${allRecords.length} 条${isGroupAdmin() ? currentUserManagedGroup : isSuperAdmin() ? '' : '我的'}记录`, 'ok');
   } catch(e) {
     hideLoader();
     showToast('刷新失败：'+e.message, 'err');
@@ -1519,8 +1615,11 @@ async function init() {
     hideLoader();
 
     // Update header
+    const scopeLabel = isSuperAdmin() ? `${allRecords.length} 个项目`
+                     : isGroupAdmin() ? `${currentUserManagedGroup} · ${allRecords.length} 个项目`
+                     : `我的项目 · ${allRecords.length} 个项目`;
     document.getElementById('hdSub').textContent =
-      `Long-term Procurement Tracking · ${allRecords.length} 个项目 · ${new Date().toLocaleDateString('zh-CN')} 更新`;
+      `Long-term Procurement Tracking · ${scopeLabel} · ${new Date().toLocaleDateString('zh-CN')} 更新`;
     document.getElementById('statusDot').className = 'status-dot ok';
     document.getElementById('statusLbl').textContent = 'Teable 已连接';
 
