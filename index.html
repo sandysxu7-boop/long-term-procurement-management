@@ -564,7 +564,8 @@ async function initSSO() {
       const data = await res.json();
       if (data.token) {
         localStorage.setItem(JWT_KEY, data.token);
-        return await checkPermission(decodeJWT(data.token));
+        console.log('[SSO] raw user data:', JSON.stringify(data.user));
+        return await checkPermission({ ...data.user, ...decodeJWT(data.token) });
       }
       showAuthErr('身份验证失败：' + (data.error || '未知错误'));
       return false;
