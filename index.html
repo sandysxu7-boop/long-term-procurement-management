@@ -494,6 +494,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei
       </div>
       <div id="adminDeniedList"></div>
     </div>
+    <div id="ssoDebugBox" style="display:none;padding:0 16px 16px">
+      <div style="font-size:11px;color:#6b7280;background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:10px 14px;word-break:break-all">
+        <strong>🔍 诊断（临时）</strong><br>
+        <span id="ssoDebugText"></span>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -541,6 +547,18 @@ function onLoginSuccess(user) {
   if (currentUserRole === '管理员') {
     document.getElementById('tab-admin').style.display = '';
   }
+  const dbg = localStorage.getItem('_sso_debug');
+  if (dbg && currentUserRole === '管理员') {
+    try {
+      const d = JSON.parse(dbg);
+      const box = document.getElementById('ssoDebugBox');
+      const txt = document.getElementById('ssoDebugText');
+      if (box && txt) {
+        txt.textContent = 'workcode=' + (d.workcode ?? '(空)') + ' | 字段: ' + Object.keys(d).join(', ') + ' | 原始: ' + JSON.stringify(d);
+        box.style.display = '';
+      }
+    } catch(e) {}
+  }
 }
 
 function logout() {
@@ -564,7 +582,7 @@ async function initSSO() {
       const data = await res.json();
       if (data.token) {
         localStorage.setItem(JWT_KEY, data.token);
-        console.log('[SSO] raw user data:', JSON.stringify(data.user));
+        localStorage.setItem('_sso_debug', JSON.stringify(data.user));
         return await checkPermission({ ...data.user, ...decodeJWT(data.token) });
       }
       showAuthErr('身份验证失败：' + (data.error || '未知错误'));
