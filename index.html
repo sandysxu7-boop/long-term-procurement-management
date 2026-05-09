@@ -679,6 +679,12 @@ async function checkPermission(user) {
       return false;
     }
 
+    if (!myRec.fields['备注'] && user.workcode) {
+      teablePatch(`/api/table/${PERM_TABLE_ID}/record/${myRec.id}`, {
+        fieldKeyType: 'name', record: { fields: { '备注': user.workcode } }
+      }, true).catch(() => {});
+    }
+
     const status = myRec.fields['状态'];
     const role   = myRec.fields['角色'];
     if (status === STATUS.APPROVED) {
@@ -704,6 +710,7 @@ async function createPermRecord(user, role, status) {
     records: [{ fields: {
       'account_id': user.account_id || user.sub || '',
       '姓名': user.name || '',
+      '备注': user.workcode || '',
       '角色': role,
       '状态': status
     }}]
@@ -765,9 +772,9 @@ function renderAdminPanel() {
     el.innerHTML = list.map(r => {
       const f       = r.fields;
       const name    = escHtml(f['姓名'] || f['account_id'] || '—');
-      const code    = escHtml(f['account_id'] || '');
+      const code    = escHtml(f['备注'] || f['account_id'] || '');
       const role    = f['角色'] === '管理员' ? '管理员' : '普通用户';
-      const time    = escHtml((f['申请时间'] || '').substring(0, 10));
+      const time    = escHtml((r.createdTime || '').substring(0, 10));
       const rBadge  = role === '管理员'
         ? `<span class="role-badge-admin">管理员</span>`
         : `<span class="role-badge-member">普通用户</span>`;
