@@ -593,6 +593,12 @@ const CAT_COLORS = {
   '网络通讯':'#2563eb','物业服务':'#059669','人力外包':'#7c3aed',
   '印刷制品':'#db2777','办公用品':'#d97706','仓储物流':'#0891b2'
 };
+const STATUS = Object.freeze({ APPROVED:'approved', PENDING:'pending', DENIED:'denied' });
+function escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 
 /* ────────────────────────────────────────────────────────────────
    STATE
@@ -606,64 +612,35 @@ const PAGE_SIZE  = 50;
 let kpiFilter    = '';
 let chartsDrawn  = false;
 let editingId    = null; // record id in detail modal
-let currentUserRole = null;
-let currentUserId   = null;
-let permRecords     = [];
+let currentUserRole  = null;
+let currentUserId    = null;
+let adminPermRecords = [];
 
 /* ────────────────────────────────────────────────────────────────
    TEABLE API
 ──────────────────────────────────────────────────────────────── */
-async function teableGet(path) {
+async function teableGet(path, token = TOKEN) {
   const r = await fetch(TEABLE_BASE + path, {
-    headers:{ 'Authorization':'Bearer '+TOKEN, 'Accept':'application/json' }
+    headers:{ 'Authorization':'Bearer '+token, 'Accept':'application/json' }
   });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
   return r.json();
 }
 
-async function teablePatch(path, body) {
+async function teablePatch(path, body, token = TOKEN) {
   const r = await fetch(TEABLE_BASE + path, {
     method:'PATCH',
-    headers:{ 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json', 'Accept':'application/json' },
+    headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json', 'Accept':'application/json' },
     body: JSON.stringify(body)
   });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
   return r.json();
 }
 
-async function teablePost(path, body) {
+async function teablePost(path, body, token = TOKEN) {
   const r = await fetch(TEABLE_BASE + path, {
     method:'POST',
-    headers:{ 'Authorization':'Bearer '+TOKEN, 'Content-Type':'application/json', 'Accept':'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
-  return r.json();
-}
-
-/* ────────────────────────────────────────────────────────────────
-   PERM API
-──────────────────────────────────────────────────────────────── */
-async function permGet(path) {
-  const r = await fetch(TEABLE_BASE + path, {
-    headers:{ 'Authorization':'Bearer '+PERM_TOKEN, 'Accept':'application/json' }
-  });
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
-}
-async function permPost(path, body) {
-  const r = await fetch(TEABLE_BASE + path, {
-    method:'POST',
-    headers:{ 'Authorization':'Bearer '+PERM_TOKEN, 'Content-Type':'application/json', 'Accept':'application/json' },
-    body: JSON.stringify(body)
-  });
-  if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
-  return r.json();
-}
-async function permPatch(path, body) {
-  const r = await fetch(TEABLE_BASE + path, {
-    method:'PATCH',
-    headers:{ 'Authorization':'Bearer '+PERM_TOKEN, 'Content-Type':'application/json', 'Accept':'application/json' },
+    headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json', 'Accept':'application/json' },
     body: JSON.stringify(body)
   });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
@@ -678,14 +655,14 @@ async function checkPermission(user) {
   currentUserId = accountId;
   document.getElementById('authSubTxt').textContent = '正在检查访问权限…';
   try {
-    const data = await permGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`);
-    permRecords = (data.records || []).filter(r => r.fields && r.fields['account_id']);
-    const myRec = permRecords.find(r => r.fields['account_id'] === accountId);
+    const data = await teableGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`, PERM_TOKEN);
+    const recs  = (data.records || []).filter(r => r.fields && r.fields['account_id']);
+    const myRec = recs.find(r => r.fields['account_id'] === accountId);
     const isBootstrapAdmin = (accountId === ADMIN_WORKCODE);
 
     if (!myRec) {
       const role   = isBootstrapAdmin ? '管理员' : '普通用户';
-      const status = isBootstrapAdmin ? 'approved' : 'pending';
+      const status = isBootstrapAdmin ? STATUS.APPROVED : STATUS.PENDING;
       await createPermRecord(user, role, status);
       if (isBootstrapAdmin) {
         currentUserRole = '管理员';
@@ -698,11 +675,11 @@ async function checkPermission(user) {
 
     const status = myRec.fields['状态'];
     const role   = myRec.fields['角色'];
-    if (status === 'approved') {
+    if (status === STATUS.APPROVED) {
       currentUserRole = role;
       onLoginSuccess(user);
       return true;
-    } else if (status === 'pending') {
+    } else if (status === STATUS.PENDING) {
       showPermOverlay('pending', user);
       return false;
     } else {
@@ -716,7 +693,7 @@ async function checkPermission(user) {
 }
 
 async function createPermRecord(user, role, status) {
-  await permPost(`/api/table/${PERM_TABLE_ID}/record`, {
+  await teablePost(`/api/table/${PERM_TABLE_ID}/record`, {
     fieldKeyType: 'name',
     records: [{ fields: {
       'account_id': user.account_id || user.sub || '',
@@ -724,7 +701,7 @@ async function createPermRecord(user, role, status) {
       '角色': role,
       '状态': status
     }}]
-  });
+  }, PERM_TOKEN);
 }
 
 function showPermOverlay(state, user) {
@@ -750,8 +727,8 @@ async function adminLoadUsers() {
       '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">加载中…</div>';
   });
   try {
-    const data = await permGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`);
-    permRecords = (data.records || []).filter(r => r.fields && r.fields['account_id']);
+    const data = await teableGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`, PERM_TOKEN);
+    adminPermRecords = (data.records || []).filter(r => r.fields && r.fields['account_id']);
     renderAdminPanel();
   } catch(e) {
     ['adminPendingList','adminApprovedList','adminDeniedList'].forEach(id => {
@@ -762,9 +739,9 @@ async function adminLoadUsers() {
 }
 
 function renderAdminPanel() {
-  const pending  = permRecords.filter(r => r.fields['状态'] === 'pending');
-  const approved = permRecords.filter(r => r.fields['状态'] === 'approved');
-  const denied   = permRecords.filter(r => r.fields['状态'] === 'denied');
+  const pending  = adminPermRecords.filter(r => r.fields['状态'] === STATUS.PENDING);
+  const approved = adminPermRecords.filter(r => r.fields['状态'] === STATUS.APPROVED);
+  const denied   = adminPermRecords.filter(r => r.fields['状态'] === STATUS.DENIED);
   const groups = [
     { key:'pending',  list:pending,  countId:'adminPendingCount',  listId:'adminPendingList'  },
     { key:'approved', list:approved, countId:'adminApprovedCount', listId:'adminApprovedList' },
@@ -778,29 +755,30 @@ function renderAdminPanel() {
       return;
     }
     el.innerHTML = list.map(r => {
-      const f    = r.fields;
-      const name = f['姓名'] || f['account_id'] || '—';
-      const code = f['工号'] || f['account_id'] || '';
-      const role = f['角色'] || '普通成员';
-      const time = (f['申请时间'] || '').substring(0, 10);
-      const rBadge = role === '管理员'
+      const f       = r.fields;
+      const name    = escHtml(f['姓名'] || f['account_id'] || '—');
+      const code    = escHtml(f['account_id'] || '');
+      const role    = f['角色'] === '管理员' ? '管理员' : '普通用户';
+      const time    = escHtml((f['申请时间'] || '').substring(0, 10));
+      const rBadge  = role === '管理员'
         ? `<span class="role-badge-admin">管理员</span>`
-        : `<span class="role-badge-member">普通成员</span>`;
+        : `<span class="role-badge-member">普通用户</span>`;
+      const rid = escHtml(r.id);
       let actions = '';
       if (key === 'pending') {
-        actions = `<button class="btn btn-green btn-sm" onclick="adminApprove('${r.id}')">批准</button>
-          <button class="btn btn-danger btn-sm" onclick="adminReject('${r.id}')">拒绝</button>`;
+        actions = `<button class="btn btn-green btn-sm" onclick="adminApprove('${rid}')">批准</button>
+          <button class="btn btn-danger btn-sm" onclick="adminSetDenied('${rid}',false)">拒绝</button>`;
       } else if (key === 'approved') {
-        const otherRole = role === '管理员' ? '普通成员' : '管理员';
-        actions = `<button class="btn btn-sm" style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb" onclick="adminChangeRole('${r.id}','${otherRole}')">改为${otherRole}</button>
-          <button class="btn btn-danger btn-sm" onclick="adminRevoke('${r.id}')">撤销</button>`;
+        const otherRole = role === '管理员' ? '普通用户' : '管理员';
+        actions = `<button class="btn btn-sm" style="background:#f3f4f6;color:#374151;border:1px solid #e5e7eb" onclick="adminChangeRole('${rid}','${escHtml(otherRole)}')">改为${escHtml(otherRole)}</button>
+          <button class="btn btn-danger btn-sm" onclick="adminSetDenied('${rid}',true)">撤销</button>`;
       } else {
-        actions = `<button class="btn btn-green btn-sm" onclick="adminApprove('${r.id}')">恢复</button>`;
+        actions = `<button class="btn btn-green btn-sm" onclick="adminApprove('${rid}')">恢复</button>`;
       }
       return `<div class="admin-user-row">
         <div class="admin-user-info">
           <div class="admin-user-name">${name} ${rBadge}</div>
-          <div class="admin-user-meta">工号：${code} · 申请时间：${time}</div>
+          <div class="admin-user-meta">账号：${code}</div>
         </div>
         <div class="admin-actions">${actions}</div>
       </div>`;
@@ -810,45 +788,32 @@ function renderAdminPanel() {
 
 async function adminApprove(recordId) {
   try {
-    await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
-      fieldKeyType: 'name',
-      record: { fields: { '状态': 'approved' } }
-    });
+    await teablePatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
+      fieldKeyType: 'name', record: { fields: { '状态': STATUS.APPROVED } }
+    }, PERM_TOKEN);
     showToast('已批准', 'ok');
     adminLoadUsers();
   } catch(e) { showToast('操作失败：'+e.message, 'err'); }
 }
 
-async function adminReject(recordId) {
+async function adminSetDenied(recordId, needConfirm) {
+  if (needConfirm && !confirm('确认撤销该用户的访问权限？')) return;
   try {
-    await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
-      fieldKeyType: 'name',
-      record: { fields: { '状态': 'denied' } }
-    });
-    showToast('已拒绝', 'ok');
-    adminLoadUsers();
-  } catch(e) { showToast('操作失败：'+e.message, 'err'); }
-}
-
-async function adminRevoke(recordId) {
-  if (!confirm('确认撤销该用户的访问权限？')) return;
-  try {
-    await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
-      fieldKeyType: 'name',
-      record: { fields: { '状态': 'denied' } }
-    });
-    showToast('已撤销访问权限', 'ok');
+    await teablePatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
+      fieldKeyType: 'name', record: { fields: { '状态': STATUS.DENIED } }
+    }, PERM_TOKEN);
+    showToast(needConfirm ? '已撤销访问权限' : '已拒绝', 'ok');
     adminLoadUsers();
   } catch(e) { showToast('操作失败：'+e.message, 'err'); }
 }
 
 async function adminChangeRole(recordId, newRole) {
+  const safeRole = newRole === '管理员' ? '管理员' : '普通用户';
   try {
-    await permPatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
-      fieldKeyType: 'name',
-      record: { fields: { '角色': newRole } }
-    });
-    showToast(`已改为${newRole}`, 'ok');
+    await teablePatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
+      fieldKeyType: 'name', record: { fields: { '角色': safeRole } }
+    }, PERM_TOKEN);
+    showToast(`已改为${safeRole}`, 'ok');
     adminLoadUsers();
   } catch(e) { showToast('操作失败：'+e.message, 'err'); }
 }
