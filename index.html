@@ -524,6 +524,8 @@ function getSavedAuth() {
 
 function showAuthErr(msg) {
   document.getElementById('authSpinner').style.display = 'none';
+  document.getElementById('authPermPending').classList.add('hidden');
+  document.getElementById('authPermDenied').classList.add('hidden');
   const el = document.getElementById('authErr');
   el.textContent = msg;
   el.classList.remove('hidden');
@@ -711,6 +713,8 @@ async function createPermRecord(user, role, status) {
 function showPermOverlay(state, user) {
   document.getElementById('authSpinner').style.display = 'none';
   document.getElementById('authSubTxt').style.display = 'none';
+  document.getElementById('authPermPending').classList.add('hidden');
+  document.getElementById('authPermDenied').classList.add('hidden');
   if (state === 'pending') {
     document.getElementById('authPermPending').classList.remove('hidden');
     document.getElementById('authPermPendingUser').textContent =
