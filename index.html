@@ -680,7 +680,7 @@ async function checkPermission(user) {
     }
 
     if (!myRec.fields['备注'] && user.workcode) {
-      teablePatch(`/api/table/${PERM_TABLE_ID}/record/${myRec.id}`, {
+      await teablePatch(`/api/table/${PERM_TABLE_ID}/record/${myRec.id}`, {
         fieldKeyType: 'name', record: { fields: { '备注': user.workcode } }
       }, true).catch(() => {});
     }
@@ -793,7 +793,7 @@ function renderAdminPanel() {
       return `<div class="admin-user-row">
         <div class="admin-user-info">
           <div class="admin-user-name">${name} ${rBadge}</div>
-          <div class="admin-user-meta">账号：${code}</div>
+          <div class="admin-user-meta">工号：${code}${time ? ' · 申请时间：' + time : ''}</div>
         </div>
         <div class="admin-actions">${actions}</div>
       </div>`;
