@@ -581,12 +581,8 @@ async function initSSO() {
 /* ────────────────────────────────────────────────────────────────
    CONFIG
 ──────────────────────────────────────────────────────────────── */
-const TEABLE_BASE = 'https://yach-teable.zhiyinlou.com';
-const TABLE_ID    = 'tblwotOBEtoOOchp8Sj';
-const TOKEN       = 'teable_accv0YqVn9u1avfVdzv_F0wNqCFXBPYHg53lhbK2OqLHfC5TP6yUs3FAR6xApwY=';
-
+const TABLE_ID       = 'tblwotOBEtoOOchp8Sj';
 const PERM_TABLE_ID  = 'tbldOAnHF4nSNj6kMb1';
-const PERM_TOKEN     = 'teable_acc1G9f8DPBFIkNB8xL_V6GiKbDmoGJGSRZXi5vc/03K6XvSVKpqRy6JrnqRhx4=';
 const ADMIN_WORKCODE = '97ccf113-02b4-1080-98db-5ba2ff0416c8';
 
 const CAT_COLORS = {
@@ -619,28 +615,36 @@ let adminPermRecords = [];
 /* ────────────────────────────────────────────────────────────────
    TEABLE API
 ──────────────────────────────────────────────────────────────── */
-async function teableGet(path, token = TOKEN) {
-  const r = await fetch(TEABLE_BASE + path, {
-    headers:{ 'Authorization':'Bearer '+token, 'Accept':'application/json' }
+function _teableUrl(path, usePerm) {
+  const prefix = usePerm ? '/teable/perm' : '/teable/data';
+  return FC_BASE + prefix + path;
+}
+function _teableAuth() {
+  return { 'Authorization': 'Bearer ' + (localStorage.getItem(JWT_KEY) || '') };
+}
+
+async function teableGet(path, usePerm = false) {
+  const r = await fetch(_teableUrl(path, usePerm), {
+    headers:{ ..._teableAuth(), 'Accept':'application/json' }
   });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
   return r.json();
 }
 
-async function teablePatch(path, body, token = TOKEN) {
-  const r = await fetch(TEABLE_BASE + path, {
+async function teablePatch(path, body, usePerm = false) {
+  const r = await fetch(_teableUrl(path, usePerm), {
     method:'PATCH',
-    headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json', 'Accept':'application/json' },
+    headers:{ ..._teableAuth(), 'Content-Type':'application/json', 'Accept':'application/json' },
     body: JSON.stringify(body)
   });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
   return r.json();
 }
 
-async function teablePost(path, body, token = TOKEN) {
-  const r = await fetch(TEABLE_BASE + path, {
+async function teablePost(path, body, usePerm = false) {
+  const r = await fetch(_teableUrl(path, usePerm), {
     method:'POST',
-    headers:{ 'Authorization':'Bearer '+token, 'Content-Type':'application/json', 'Accept':'application/json' },
+    headers:{ ..._teableAuth(), 'Content-Type':'application/json', 'Accept':'application/json' },
     body: JSON.stringify(body)
   });
   if (!r.ok) { const e = await r.json().catch(()=>({})); throw new Error(e.message||`HTTP ${r.status}`); }
@@ -655,7 +659,7 @@ async function checkPermission(user) {
   currentUserId = accountId;
   document.getElementById('authSubTxt').textContent = '正在检查访问权限…';
   try {
-    const data = await teableGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`, PERM_TOKEN);
+    const data = await teableGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`, true);
     const recs  = (data.records || []).filter(r => r.fields && r.fields['account_id']);
     const myRec = recs.find(r => r.fields['account_id'] === accountId);
     const isBootstrapAdmin = (accountId === ADMIN_WORKCODE);
@@ -701,7 +705,7 @@ async function createPermRecord(user, role, status) {
       '角色': role,
       '状态': status
     }}]
-  }, PERM_TOKEN);
+  }, true);
 }
 
 function showPermOverlay(state, user) {
@@ -727,7 +731,7 @@ async function adminLoadUsers() {
       '<div style="padding:16px;text-align:center;color:#9ca3af;font-size:12px">加载中…</div>';
   });
   try {
-    const data = await teableGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`, PERM_TOKEN);
+    const data = await teableGet(`/api/table/${PERM_TABLE_ID}/record?fieldKeyType=name&take=1000`, true);
     adminPermRecords = (data.records || []).filter(r => r.fields && r.fields['account_id']);
     renderAdminPanel();
   } catch(e) {
@@ -790,7 +794,7 @@ async function adminApprove(recordId) {
   try {
     await teablePatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
       fieldKeyType: 'name', record: { fields: { '状态': STATUS.APPROVED } }
-    }, PERM_TOKEN);
+    }, true);
     showToast('已批准', 'ok');
     adminLoadUsers();
   } catch(e) { showToast('操作失败：'+e.message, 'err'); }
@@ -801,7 +805,7 @@ async function adminSetDenied(recordId, needConfirm) {
   try {
     await teablePatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
       fieldKeyType: 'name', record: { fields: { '状态': STATUS.DENIED } }
-    }, PERM_TOKEN);
+    }, true);
     showToast(needConfirm ? '已撤销访问权限' : '已拒绝', 'ok');
     adminLoadUsers();
   } catch(e) { showToast('操作失败：'+e.message, 'err'); }
@@ -812,7 +816,7 @@ async function adminChangeRole(recordId, newRole) {
   try {
     await teablePatch(`/api/table/${PERM_TABLE_ID}/record/${recordId}`, {
       fieldKeyType: 'name', record: { fields: { '角色': safeRole } }
-    }, PERM_TOKEN);
+    }, true);
     showToast(`已改为${safeRole}`, 'ok');
     adminLoadUsers();
   } catch(e) { showToast('操作失败：'+e.message, 'err'); }
