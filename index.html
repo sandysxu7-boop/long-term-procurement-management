@@ -568,6 +568,7 @@ async function initSSO() {
   // 2. SSO 回调 token
   const params = new URLSearchParams(window.location.search);
   const ssoToken = params.get('token');
+  const relay = params.get('relay') || '';
   if (ssoToken) {
     history.replaceState({}, '', window.location.pathname);
     document.getElementById('authSubTxt').textContent = '正在验证身份…';
@@ -576,6 +577,7 @@ async function initSSO() {
       const data = await res.json();
       if (data.token) {
         localStorage.setItem(JWT_KEY, data.token);
+        if (relay.startsWith('https://sandysxu7-boop.github.io')) { window.location.href = relay; return false; }
         return await checkPermission({ ...data.user, ...decodeJWT(data.token) });
       }
       showAuthErr('身份验证失败：' + (data.error || '未知错误'));
