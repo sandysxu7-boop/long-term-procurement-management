@@ -912,28 +912,28 @@ async function adminSetRole(recordId, newRoleValue) {
 ──────────────────────────────────────────────────────────────── */
 function normalize(rec) {
   const f = rec.fields || {};
-  const buyer = f['采购员'];
+  const buyer = f['❗️采购员'];
   const buyerObj = typeof buyer === 'object' && buyer ? buyer : null;
-  const endDateStr = f['合同到期日期'] || null;
-  const startDateStr = f['合同起始日期'] || null;
+  const endDateStr = f['新合同到期日期 （无需填写）'] || f['历史合同到期日期（无需填写）'] || null;
+  const startDateStr = f['新合同起始日期（ 无需填写）'] || f['历史合同起始日期（无需填写）'] || null;
   const endDate = endDateStr ? new Date(endDateStr) : null;
   const startDate = startDateStr ? new Date(startDateStr) : null;
   const today = new Date(); today.setHours(0,0,0,0);
   const daysToExpiry = endDate ? Math.round((endDate - today) / 86400000) : null;
-  const endProgress = f['辅助列-到期前进展'];
+  const endProgress = f['历史项目辅助列-到期前进展（无需填写）'];
   return {
     id: rec.id,
-    group: f['项目组'] || '',
-    category: f['一级品类'] || '',
-    progress: f['项目进度'] || '待启动',
-    name: f['项目名称'] || '',
+    group: f['⭐❗❗项目组'] || '',
+    category: f['⭐❗️❗️一级品类'] || '',
+    progress: f['⭐❗️项目进度'] || '待启动',
+    name: f['⭐❗️项目名称'] || '',
     buyerName: buyerObj ? (buyerObj.title||'').split('-')[0] : (buyer||''),
     buyerTitle: buyerObj ? (buyerObj.title||'') : '',
     buyerAvatar: buyerObj ? buyerObj.avatarUrl : null,
-    duration: f['签约/计划签约周期'] || '',
-    searchId: f['检索ID'] || '',
-    subCategory: f['具体品类'] || '',
-    amount: f['预算/合同金额（单位：元）'] || 0,
+    duration: f['⭐❗️❗️计划签约周期'] || '',
+    searchId: f['❗️❗️历史项目检索ID（采购四组项目管理与统计表中的检索 ID）'] || '',
+    subCategory: f['⭐❗️❗️具体品类'] || '',
+    amount: f['❗️合同总金额（单位：元）'] || f['⭐❗️预算/历史合同金额（单位：元）'] || 0,
     startDate, endDate,
     startDateStr: startDate ? startDate.toISOString().slice(0,10) : '',
     endDateStr: endDate ? endDate.toISOString().slice(0,10) : '',
@@ -1358,7 +1358,7 @@ async function updateProgress(recordId, newProgress, selectEl) {
   try {
     await teablePatch(`/api/table/${TABLE_ID}/record/${recordId}`, {
       fieldKeyType: 'name',
-      record: { fields: { '项目进度': newProgress } }
+      record: { fields: { '⭐❗️项目进度': newProgress } }
     });
     if (rec) rec.progress = newProgress;
     updateKPIs();
@@ -1396,7 +1396,7 @@ async function submitAddProject() {
   const name  = document.getElementById('f-name').value.trim();
   if (!group||!cat||!name) { showToast('请填写项目组、一级品类和项目名称', 'err'); return; }
 
-  const fields = { '项目组': group, '一级品类': cat, '项目名称': name };
+  const fields = { '⭐❗❗项目组': group, '⭐❗️❗️一级品类': cat, '⭐❗️项目名称': name };
   const subcat = document.getElementById('f-subcat').value.trim();
   const prog   = document.getElementById('f-progress').value;
   const sid    = document.getElementById('f-searchid').value.trim();
@@ -1405,13 +1405,13 @@ async function submitAddProject() {
   const start  = document.getElementById('f-start').value;
   const end    = document.getElementById('f-end').value;
 
-  if (subcat) fields['具体品类'] = subcat;
-  if (prog)   fields['项目进度'] = prog;
-  if (sid)    fields['检索ID'] = sid;
-  if (dur)    fields['签约/计划签约周期'] = dur;
-  if (!isNaN(amt)&&amt>0) fields['预算/合同金额（单位：元）'] = amt;
-  if (start)  fields['合同起始日期'] = start+'T00:00:00.000Z';
-  if (end)    fields['合同到期日期'] = end+'T00:00:00.000Z';
+  if (subcat) fields['⭐❗️❗️具体品类'] = subcat;
+  if (prog)   fields['⭐❗️项目进度'] = prog;
+  if (sid)    fields['❗️❗️历史项目检索ID（采购四组项目管理与统计表中的检索 ID）'] = sid;
+  if (dur)    fields['⭐❗️❗️计划签约周期'] = dur;
+  if (!isNaN(amt)&&amt>0) fields['⭐❗️预算/历史合同金额（单位：元）'] = amt;
+  if (start)  fields['历史合同起始日期（无需填写）'] = start+'T00:00:00.000Z';
+  if (end)    fields['历史合同到期日期（无需填写）'] = end+'T00:00:00.000Z';
 
   const btn = document.getElementById('addSubmitBtn');
   btn.textContent = '保存中…'; btn.disabled = true;
@@ -1497,7 +1497,7 @@ async function saveDetail() {
   try {
     await teablePatch(`/api/table/${TABLE_ID}/record/${editingId}`, {
       fieldKeyType: 'name',
-      record: { fields: { '项目进度': newProg } }
+      record: { fields: { '⭐❗️项目进度': newProg } }
     });
     const rec = allRecords.find(r=>r.id===editingId);
     if (rec) rec.progress = newProg;
