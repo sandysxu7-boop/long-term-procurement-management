@@ -912,10 +912,11 @@ async function adminSetRole(recordId, newRoleValue) {
 ──────────────────────────────────────────────────────────────── */
 function normalize(rec) {
   const f = rec.fields || {};
+  const dateVal = v => Array.isArray(v) ? (v[0] || null) : (v || null);
   const buyer = f['❗️采购员'];
-  const buyerObj = typeof buyer === 'object' && buyer ? buyer : null;
-  const endDateStr = f['新合同到期日期 （无需填写）'] || f['历史合同到期日期（无需填写）'] || null;
-  const startDateStr = f['新合同起始日期（ 无需填写）'] || f['历史合同起始日期（无需填写）'] || null;
+  const buyerObj = typeof buyer === 'object' && !Array.isArray(buyer) && buyer ? buyer : null;
+  const endDateStr = dateVal(f['新合同到期日期 （无需填写）']) || dateVal(f['历史合同到期日期（无需填写）']) || null;
+  const startDateStr = dateVal(f['新合同起始日期（ 无需填写）']) || dateVal(f['历史合同起始日期（无需填写）']) || null;
   const endDate = endDateStr ? new Date(endDateStr) : null;
   const startDate = startDateStr ? new Date(startDateStr) : null;
   const today = new Date(); today.setHours(0,0,0,0);
